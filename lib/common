@@ -1,0 +1,38 @@
+#!/bin/sh
+
+if [ -z "${LIB_COMMON_INCLUDED}" ]; then
+LIB_COMMON_INCLUDED=1
+
+zf_usage() {
+    local msg=$1
+    [ ! -z "${msg}" ] && echo "Error: ${msg}" >&2
+    cat >&2 << EOT
+Usage: zfsync [-h] -H target_host -T target_zfs [-U target_user] source_zfs
+
+Options:
+    TO BE COMPLETED
+
+EOT
+    [ ! -z "${msg}" ] && exit 1
+}
+
+zf_debug() {
+    [ ${DEBUG} -eq 1 ] || return
+    printf "[%s] Debug: %s\n" "$(date)" "${@}" >&2
+}
+
+zf_warn() {
+    printf "[%s] Warning: %s\n" "$(date)" "${@}" >&2
+}
+
+zf_error() {
+    printf "[%s] Error: %s\n" "$(date)" "${@}" >&2
+    exit 1
+}
+
+zf_msg(){
+    [ ${SILENT} -eq 0 ] || return
+    printf "[%s] %s\n" "$(date)" "${@}" >&2
+}
+
+fi

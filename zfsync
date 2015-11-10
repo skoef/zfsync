@@ -1,0 +1,122 @@
+#!/bin/sh
+
+DEBUG=1
+SILENT=0
+
+# XXX: ideas:
+# - compression
+# - zfs properties
+# - recursive sending
+
+# halt on error
+set -e
+# get rid of locale
+unset LC_ALL
+unset LANG
+# force PATH
+PATH=${PATH}:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin
+
+if [ -f "./lib/common" ]; then
+    LIB="./lib"
+elif [ -d "/usr/local/lib/zfsync" ]; then
+    LIB="/usr/local/lib/zfsync"
+else
+    echo "ERROR: required libraries not found"
+    exit 1
+fi
+
+. "${LIB}/common"
+. "${LIB}/zfs"
+
+# parse command line
+if [ $# -eq 0 ]; then
+    zf_usage
+    exit 1
+fi
+
+while getopts 'hH:I:T:U:' opt; do
+    case ${opt} in
+        h)
+            zf_usage
+            exit 0
+            ;;
+        I) IDENTITY_FILE=${OPTARG};;
+        H) TARGET_HOST=${OPTARG};;
+        T) TARGET_ZFS=${OPTARG};;
+        U) TARGET_USER=${OPTARG};;
+        ?)
+            zf_usage
+            exit 1
+            ;;
+    esac
+done
+shift "$((OPTIND - 1))"
+
+SOURCE_ZFS=${1}
+
+# defaults and parameter checking
+[ -z "${TARGET_USER}" ] && TARGET_USER="${USER}"
+[ -z "${TARGET_HOST}" ] && zf_usage "no target ZFS specified"
+[ -z "${SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
+
+# sanity check
+zf_msg "Checking source and target"
+if ! zf_zfs_exists "${SOURCE_ZFS}"; then
+    zf_error "source ZFS not found"
+fi
+
+if ! zf_zfs_exists "${TARGET_ZFS}" 1; then
+    zf_error "target ZFS not found"
+fi
+
+# permissions check
+zf_msg "Checking permissions on source and target"
+# TODO: or we're root...
+if ! zf_zfs_is_user_allowed "${USER}" "hold,send" "${SOURCE_ZFS}"; then
+   zf_error "${USER} is not allowed to send ${SOURCE_ZFS}"
+fi
+
+# TODO: or we're root...
+# TODO: what if the other side is not mounted
+if ! zf_zfs_is_user_allowed "${TARGET_USER}" "receive,create,mount" "${TARGET_ZFS}" 1; then
+   zf_error "${ZFS_USER} is not allowed to receive on ${TARGET_ZFS}"
+fi
+
+# look for matching snapshots
+if ! zf_zfs_has_matching_snapshots "${SOURCE_ZFS}" "${TARGET_ZFS}"; then
+    zf_warn "no matching snapshots between source and target"
+    oldest_snapshot=$(zf_zfs_snapshots "${SOURCE_ZFS}" | head -1)
+    # get oldest source snapshot for initial sync
+    if [ -z "${oldest_snapshot}" ]; then
+        zf_error "source ${SOURCE_ZFS} has no snapshots"
+    fi
+
+    # perform initial sync
+    # TODO: fix basename stuff
+    zf_msg "Sending initial snapshot ${oldest_snapshot}"
+    zf_zfs_cmd "send -v ${SOURCE_ZFS}${oldest_snapshot}" | \
+        zf_zfs_remote_cmd "receive -v ${TARGET_ZFS}/$(basename ${SOURCE_ZFS})"
+
+    zf_msg "Checking both sides again for matches"
+fi
+
+# perform incremental sync
+latest_match=$(zf_zfs_matching_snapshots "${SOURCE_ZFS}" "${TARGET_ZFS}" | tail -1)
+if [ -z "${latest_match}" ]; then
+    zf_error "no matches found between ${SOURCE_ZFS} and ${TARGET_ZFS}"
+fi
+
+zf_debug "found matching snapshot ${latest_match}"
+latest_snapshot=$(zf_zfs_snapshots "${SOURCE_ZFS}" | tail -1)
+if [ "${latest_match}" = "${latest_snapshot}" ]; then
+    zf_msg "Both ends are in sync"
+    return
+fi
+
+zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
+# TODO: make -R optional
+# TODO: make -I optional (in favor of -i)
+# TODO: make -F optional
+zf_zfs_cmd "send -R -v -I ${latest_match} ${SOURCE_ZFS}${latest_snapshot}" | \
+    zf_zfs_remote_cmd "receive -v ${TARGET_ZFS}/$(basename ${SOURCE_ZFS})"
+zf_msg "Done"

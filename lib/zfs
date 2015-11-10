@@ -1,0 +1,124 @@
+#!/bin/sh
+
+if [ -z "${LIB_ZFS_INCLUDED}" ]; then
+LIB_ZFS_INCLUDED=1
+
+zf_zfs_is_user_allowed() {
+    local user=$1 permissions=$2 zfs=$3 remote=$4
+    [ -z "${permissions}" -o -z "${zfs}" ] && zf_error "zf_zfs_is_user_allowed requires permissions and zfs parameter"
+
+    if ! expr ${permissions} : '^[a-z, ]*$' >/dev/null; then
+        zf_error "zf_zfs_is_user_allowed expects permissions in comma- or space-separated form, not ${permissions}"
+    fi
+
+    for permission in $(echo $permissions | sed 's/,/ /'); do
+        cmd="allow ${zfs}"
+        [ "${remote}" = 1 ] && allow=$(zf_zfs_remote_cmd "${cmd}") || allow=$(zf_zfs_cmd "${cmd}")
+
+        if [ -z "${allow}" ]; then
+            zf_debug "no permissions set on ${zfs} at all"
+            return 1
+        fi
+
+        # TODO: add group permissions
+        regex=" {1,}user ${user} .*,?${permission}"
+        #zf_debug "testing allow"
+        #zf_debug "${allow}"
+        #zf_debug "against ${regex}"
+        echo ${allow} | grep -q -E \
+            -e "${regex}" || return 1
+    done
+
+    return 0
+}
+
+zf_zfs_snapshots() {
+    local zfs=$1 remote=$2
+    [ -z "${zfs}" ] && zf_error "zf_zfs_snapshots requires zfs parameter"
+
+    cmd="zfs list -H -o name -s creation -t snapshot -r ${zfs}"
+    if [ "${remote}" = 1 ]; then
+        zf_zfs_remote_cmd "${cmd}" | awk -F'@' '{print "@"$2}'
+    else
+        zf_zfs_cmd "${cmd}" | awk -F'@' '{print "@"$2}'
+    fi
+}
+
+zf_zfs_has_matching_snapshots() {
+    local local_zfs=$1 remote_zfs=$2
+    [ -z "${local_zfs}" -o -z "${remote_zfs}" ] && zf_error "zf_zfs_has_matching_snapshots requires local_zfs and remote_zfs parameter"
+    zf_debug "checking if ${local_zfs} and ${remote_zfs} have matching snapshots"
+
+    matches=$(zf_zfs_matching_snapshots ${local_zfs} ${remote_zfs} | grep .)
+    ! [ -z "${matches}" ]
+}
+
+zf_zfs_matching_snapshots() {
+    local local_zfs=$1 remote_zfs=$2
+    [ -z "${local_zfs}" -o -z "${remote_zfs}" ] && zf_error "zf_zfs_matching_snapshots requires local_zfs and remote_zfs parameter"
+
+    zf_debug "comparing snapshot of ${local_zfs} and ${remote_zfs}"
+
+    tmp_local=$(mktemp /tmp/zfsync.XXXXX)
+    printf "%s\n" $(zf_zfs_snapshots "${local_zfs}") > ${tmp_local}
+
+    tmp_remote=$(mktemp /tmp/zfsync.XXXX)
+    printf "%s\n" $(zf_zfs_snapshots "${remote_zfs}" 1) > ${tmp_remote}
+
+    # show matches
+    comm -12 ${tmp_local} ${tmp_remote}
+    rm ${tmp_local} ${tmp_remote}
+}
+
+zf_zfs_exists() {
+    local zfs=$1 remote=$2
+    [ -z "${zfs}" ] && zf_error "zf_zfs_exists requires zfs parameter"
+
+    cmd="list ${zfs} >/dev/null 2>&1"
+    if [ "${remote}" = 1 ]; then
+        zf_zfs_remote_cmd "${cmd}"
+    else
+        zf_zfs_cmd "${cmd}"
+    fi
+}
+
+zf_zfs_cmd() {
+    local cmd=$1
+    [ -z "${cmd}" ] && zf_error "zf_zfs_cmd requires cmd parameter"
+
+    # ensure command starts with 'zfs '
+    expr "${cmd}" : '^zfs ' >/dev/null || cmd="zfs ${cmd}"
+    zf_debug "running local command: ${cmd}"
+
+    eval "${cmd}"
+}
+
+zf_zfs_remote_cmd() {
+    local cmd=$1 identity_arg
+    [ -z "${cmd}" ] && zf_error "zf_zfs_remote_cmd requires cmd parameter"
+
+    # ensure command starts with 'zfs '
+    expr "${cmd}" : '^zfs ' >/dev/null || cmd="zfs ${cmd}"
+    zf_debug "running remote command: ${cmd}"
+
+    [ ! -z "${IDENTITY_FILE}" ] && identity_arg="-i ${IDENTITY_FILE}"
+
+    ssh \
+        ${identity_arg} \
+        -l ${TARGET_USER} ${TARGET_HOST} \
+        "${cmd}"
+}
+
+zf_zfs_send() {
+    local zfs=$1 remote=$2 options=$3
+    [ -z "${zfs}" ] && zf_error "zf_zfs_send requires zfs parameter"
+
+    cmd="send ${options} ${zfs} >/dev/null 2>&1"
+    if [ "${remote}" = 1 ]; then
+        zf_zfs_remote_cmd "${cmd}"
+    else
+        zf_zfs_cmd "${cmd}"
+    fi
+}
+
+fi
