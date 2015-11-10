@@ -25,8 +25,9 @@ EOT
 }
 
 zf_debug() {
-    [ ${DEBUG} -eq 1 ] || return
-    printf "[%s] Debug: %s\n" "$(date)" "${@}" >&2
+    [ ${DEBUG} -eq 1 ] && \
+        printf "[%s] Debug: %s\n" "$(date)" "${@}" >&2
+    return 0
 }
 
 zf_warn() {
@@ -39,8 +40,9 @@ zf_error() {
 }
 
 zf_msg(){
-    [ ${SILENT} -eq 0 -o ${DEBUG} -eq 1 ] || return
-    printf "[%s] %s\n" "$(date)" "${@}" >&2
+    [ ${SILENT} -eq 0 -o ${DEBUG} -eq 1 ] && \
+        printf "[%s] %s\n" "$(date)" "${@}" >&2
+    return 0
 }
 
 fi
