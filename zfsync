@@ -1,6 +1,6 @@
 #!/bin/sh
 
-DEBUG=1
+DEBUG=0
 SILENT=0
 
 # XXX: ideas:
@@ -34,8 +34,9 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'hH:I:T:U:' opt; do
+while getopts 'dhH:I:qT:U:' opt; do
     case ${opt} in
+        d) DEBUG=1;;
         h)
             zf_usage
             exit 0
@@ -44,6 +45,7 @@ while getopts 'hH:I:T:U:' opt; do
         H) TARGET_HOST=${OPTARG};;
         T) TARGET_ZFS=${OPTARG};;
         U) TARGET_USER=${OPTARG};;
+        q) SILENT=1;;
         ?)
             zf_usage
             exit 1
