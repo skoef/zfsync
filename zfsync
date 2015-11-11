@@ -73,15 +73,13 @@ fi
 
 # permissions check
 zf_msg "Checking permissions on source and target"
-# TODO: or we're root...
 if ! zf_zfs_is_user_allowed "${USER}" "hold,send" "${SOURCE_ZFS}"; then
    zf_error "${USER} is not allowed to send ${SOURCE_ZFS}"
 fi
 
-# TODO: or we're root...
 # TODO: what if the other side is not mounted
-if ! zf_zfs_is_user_allowed "${TARGET_USER}" "receive,create,mount" "${TARGET_ZFS}" 1; then
-   zf_error "${ZFS_USER} is not allowed to receive on ${TARGET_ZFS}"
+if ! zf_zfs_is_user_allowed "${TARGET_USER}" "receive,create,mount,userprop" "${TARGET_ZFS}" 1; then
+   zf_error "${TARGET_USER} is not allowed to receive on ${TARGET_ZFS}"
 fi
 
 # look for matching snapshots

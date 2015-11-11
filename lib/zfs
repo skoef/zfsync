@@ -11,14 +11,24 @@ zf_zfs_is_user_allowed() {
         zf_error "zf_zfs_is_user_allowed expects permissions in comma- or space-separated form, not ${permissions}"
     fi
 
-    for permission in $(echo $permissions | sed 's/,/ /'); do
-        cmd="allow ${zfs}"
-        [ "${remote}" = 1 ] && allow=$(zf_zfs_remote_cmd "${cmd}") || allow=$(zf_zfs_cmd "${cmd}")
+    # root has permissions to everything, obviously
+    [ "${user}" = "root" ] && return 0
 
-        if [ -z "${allow}" ]; then
-            zf_debug "no permissions set on ${zfs} at all"
-            return 1
-        fi
+    zf_debug "required permissions are: ${permissions}"
+
+    # get permissions for given zfs
+    cmd="allow ${zfs}"
+    [ "${remote}" = 1 ] && allow=$(zf_zfs_remote_cmd "${cmd}") || allow=$(zf_zfs_cmd "${cmd}")
+
+    # no permissions at all
+    if [ -z "${allow}" ]; then
+        zf_debug "no permissions set on ${zfs} at all"
+        return 1
+    fi
+
+    # check if every permission is listed
+    for permission in $(echo $permissions | sed 's/,/ /g'); do
+        zf_debug "checking if ${user} has permission: ${permission}"
 
         # TODO: add group permissions
         regex=" {1,}user ${user} .*,?${permission}"
