@@ -97,8 +97,8 @@ if ! zf_zfs_has_matching_snapshots "${SOURCE_ZFS}" "${TARGET_ZFS}"; then
     # perform initial sync
     # TODO: fix basename stuff
     zf_msg "Sending initial snapshot ${oldest_snapshot}"
-    zf_zfs_cmd "send -v ${SOURCE_ZFS}${oldest_snapshot}" | \
-        zf_zfs_remote_cmd "receive -v ${TARGET_ZFS}/$(basename ${SOURCE_ZFS})"
+    [ ${DEBUG} -eq 1 ] && cmd_verb="-v"
+    zf_zfs_sync "${SOURCE_ZFS}${oldest_snapshot}" "${TARGET_ZFS}/$(basename ${SOURCE_ZFS})" "${cmd_verb}"
 
     zf_msg "Checking both sides again for matches"
 fi
@@ -120,7 +120,6 @@ zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
 # TODO: make -R optional
 # TODO: make -F optional
 [ ${DEBUG} -eq 1 ] && cmd_verb="-v"
-[ ${INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="I"
-zf_zfs_cmd "send -R ${cmd_verb} ${cmd_inc} ${latest_match} ${SOURCE_ZFS}${latest_snapshot}" | \
-    zf_zfs_remote_cmd "receive ${cmd_verb} ${TARGET_ZFS}/$(basename ${SOURCE_ZFS})"
+[ ${INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
+zf_zfs_sync "${SOURCE_ZFS}${latest_snapshot}" "${TARGET_ZFS}/$(basename ${SOURCE_ZFS})" "-R ${cmd_verb} ${cmd_inc} ${latest_match}"
 zf_msg "Done"

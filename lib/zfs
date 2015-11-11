@@ -119,16 +119,12 @@ zf_zfs_remote_cmd() {
         "${cmd}"
 }
 
-zf_zfs_send() {
-    local zfs=$1 remote=$2 options=$3
-    [ -z "${zfs}" ] && zf_error "zf_zfs_send requires zfs parameter"
+zf_zfs_sync() {
+    local source=$1 target=$2 options=$3
+    [ -z "${source}" -o -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
 
-    cmd="send ${options} ${zfs} >/dev/null 2>&1"
-    if [ "${remote}" = 1 ]; then
-        zf_zfs_remote_cmd "${cmd}"
-    else
-        zf_zfs_cmd "${cmd}"
-    fi
+    zf_zfs_cmd "send ${options} ${source}" | \
+        zf_zfs_remote_cmd "receive ${target}"
 }
 
 fi
