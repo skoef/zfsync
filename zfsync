@@ -1,8 +1,5 @@
 #!/bin/sh
 
-DEBUG=0
-SILENT=0
-
 # XXX: ideas:
 # - compression
 # - zfs properties
@@ -34,18 +31,24 @@ if [ $# -eq 0 ]; then
     exit 1
 fi
 
-while getopts 'dhH:I:qT:U:' opt; do
+# set some defaults
+DEBUG=0
+SILENT=0
+INCREMENTAL=0
+
+while getopts 'dhH:iI:qT:U:' opt; do
     case ${opt} in
         d) DEBUG=1;;
         h)
             zf_usage
             exit 0
             ;;
-        I) IDENTITY_FILE=${OPTARG};;
         H) TARGET_HOST=${OPTARG};;
+        i) INCREMENTAL=1;;
+        I) IDENTITY_FILE=${OPTARG};;
+        q) SILENT=1;;
         T) TARGET_ZFS=${OPTARG};;
         U) TARGET_USER=${OPTARG};;
-        q) SILENT=1;;
         ?)
             zf_usage
             exit 1
@@ -115,8 +118,9 @@ fi
 
 zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
 # TODO: make -R optional
-# TODO: make -I optional (in favor of -i)
 # TODO: make -F optional
-zf_zfs_cmd "send -R -v -I ${latest_match} ${SOURCE_ZFS}${latest_snapshot}" | \
-    zf_zfs_remote_cmd "receive -v ${TARGET_ZFS}/$(basename ${SOURCE_ZFS})"
+[ ${DEBUG} -eq 1 ] && cmd_verb="-v"
+[ ${INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="I"
+zf_zfs_cmd "send -R ${cmd_verb} ${cmd_inc} ${latest_match} ${SOURCE_ZFS}${latest_snapshot}" | \
+    zf_zfs_remote_cmd "receive ${cmd_verb} ${TARGET_ZFS}/$(basename ${SOURCE_ZFS})"
 zf_msg "Done"
