@@ -118,8 +118,10 @@ zf_zfs_sync() {
     local source=$1 target=$2 options=$3
     [ -z "${source}" -o -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
 
+    [ ${ZF_LARGE_BLOCKS} -eq 1 ] && options="${options} -L"
+
     zf_zfs_cmd "send ${options} ${source}" | \
-        zf_zfs_remote_cmd "receive ${target}"
+        zf_zfs_remote_cmd "receive -F ${target}"
 }
 
 fi

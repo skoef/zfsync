@@ -1,0 +1,42 @@
+#!/bin/sh
+
+if [ -z "${LIB_ZPOOL_INCLUDED}" ]; then
+LIB_ZPOOL_INCLUDED=1
+
+zf_zpool_has_feature() {
+    local feature=$1 remote=$2 output cmd
+    [ -z "${feature}" ] && zf_error "zpool_has_feature requires feature parameter"
+
+    cmd="get -H -o value feature@${feature}"
+    if [ "${remote}" = 1 ]; then
+        output=$(zf_zpool_remote_cmd "${cmd}")
+    else
+        output=$(zf_zpool_cmd "${cmd}")
+    fi
+
+    echo ${output} | grep -q -e "enabled"
+}
+
+zf_zpool_cmd() {
+    local cmd=$1
+    [ -z "${cmd}" ] && zf_error "zf_zpool_cmd requires cmd parameter"
+
+    # ensure command starts with 'zpool '
+    expr "${cmd}" : '^zpool ' >/dev/null || cmd="zpool ${cmd}"
+    zf_debug "running local command: ${cmd}"
+
+    eval "${cmd}"
+}
+
+zf_zpool_remote_cmd() {
+    local cmd=$1
+    [ -z "${cmd}" ] && zf_error "zf_zpool_remote_cmd requires cmd parameter"
+
+    # ensure command starts with 'zfs '
+    expr "${cmd}" : '^zpool ' >/dev/null || cmd="zpool ${cmd}"
+    zf_debug "running remote command: ${cmd}"
+
+    zf_ssh_cmd "${cmd}"
+}
+
+fi

@@ -2,8 +2,9 @@
 
 # XXX: ideas:
 # - compression
-# - zfs properties
+# - custom zfsync zfs properties
 # - recursive sending
+# - check for large_blocks and use it if present
 
 # halt on error
 set -e
@@ -25,6 +26,7 @@ fi
 . "${LIB}/common"
 . "${LIB}/ssh"
 . "${LIB}/zfs"
+. "${LIB}/zpool"
 
 # parse command line
 if [ $# -eq 0 ]; then
@@ -36,6 +38,7 @@ fi
 ZF_DEBUG=0
 ZF_SILENT=0
 ZF_INCREMENTAL=0
+ZF_LARGE_BLOCKS=0
 
 while getopts 'dhH:iI:qT:U:' opt; do
     case ${opt} in
@@ -64,6 +67,13 @@ ZF_SOURCE_ZFS=${1}
 [ -z "${ZF_TARGET_USER}" ] && ZF_TARGET_USER="${USER}"
 [ -z "${ZF_TARGET_HOST}" ] && zf_usage "no target ZFS specified"
 [ -z "${ZF_SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
+
+# determine if we can use -L during sending
+if zf_zpool_has_feature "large_blocks" && \
+    zf_zpool_has_feature "large_blocks" 1; then
+    zf_msg "Using large blocks while sending"
+    ZF_LARGE_BLOCKS=1
+fi
 
 # sanity check
 zf_msg "Checking source and target"
