@@ -27,7 +27,7 @@ EOT
 }
 
 zf_debug() {
-    [ ${DEBUG} -eq 1 ] && \
+    [ ${ZF_DEBUG} -eq 1 ] && \
         printf "[%s] Debug: %s\n" "$(date)" "${@}" >&2
     return 0
 }
@@ -42,7 +42,7 @@ zf_error() {
 }
 
 zf_msg(){
-    [ ${SILENT} -eq 0 -o ${DEBUG} -eq 1 ] && \
+    [ ${ZF_SILENT} -eq 0 -o ${ZF_DEBUG} -eq 1 ] && \
         printf "[%s] %s\n" "$(date)" "${@}" >&2
     return 0
 }

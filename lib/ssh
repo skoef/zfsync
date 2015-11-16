@@ -7,15 +7,15 @@ zf_ssh_cmd() {
     local cmd=$1 identity_arg user_arg
     [ -z "${cmd}" ] && zf_error "zf_ssh_cmd requires cmd parameter"
 
-    [ ! -z "${IDENTITY_FILE}" ] && identity_arg="-i ${IDENTITY_FILE}"
-    [ ! -z "${TARGET_USER}" ] && user_arg="-l ${TARGET_USER}"
+    [ ! -z "${ZF_IDENTITY_FILE}" ] && identity_arg="-i ${ZF_IDENTITY_FILE}"
+    [ ! -z "${ZF_TARGET_USER}" ] && user_arg="-l ${ZF_TARGET_USER}"
 
     zf_debug "ssh args: ${identity_arg} ${user_arg}"
 
     ssh \
         ${identity_arg} \
         ${user_arg} \
-        ${TARGET_HOST} "${cmd}"
+        ${ZF_TARGET_HOST} "${cmd}"
 }
 
 fi
