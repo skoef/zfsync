@@ -104,19 +104,14 @@ zf_zfs_cmd() {
 }
 
 zf_zfs_remote_cmd() {
-    local cmd=$1 identity_arg
+    local cmd=$1
     [ -z "${cmd}" ] && zf_error "zf_zfs_remote_cmd requires cmd parameter"
 
     # ensure command starts with 'zfs '
     expr "${cmd}" : '^zfs ' >/dev/null || cmd="zfs ${cmd}"
     zf_debug "running remote command: ${cmd}"
 
-    [ ! -z "${IDENTITY_FILE}" ] && identity_arg="-i ${IDENTITY_FILE}"
-
-    ssh \
-        ${identity_arg} \
-        -l ${TARGET_USER} ${TARGET_HOST} \
-        "${cmd}"
+    zf_ssh_cmd "${cmd}"
 }
 
 zf_zfs_sync() {

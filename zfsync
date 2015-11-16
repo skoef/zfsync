@@ -23,6 +23,7 @@ else
 fi
 
 . "${LIB}/common"
+. "${LIB}/ssh"
 . "${LIB}/zfs"
 
 # parse command line
