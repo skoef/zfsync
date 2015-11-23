@@ -51,7 +51,7 @@ while getopts 'dhH:iI:qT:U:' opt; do
         i) ZF_INCREMENTAL=1;;
         I) ZF_IDENTITY_FILE=${OPTARG};;
         q) ZF_SILENT=1;;
-        T) ZF_TARGET_ZFS=${OPTARG%/*};;
+        T) ZF_TARGET_ZFS=${OPTARG%/};;
         U) ZF_TARGET_USER=${OPTARG};;
         ?)
             zf_usage
@@ -61,7 +61,7 @@ while getopts 'dhH:iI:qT:U:' opt; do
 done
 shift "$((OPTIND - 1))"
 
-ZF_SOURCE_ZFS=${1%/*}
+ZF_SOURCE_ZFS=${1%/}
 
 # defaults and parameter checking
 [ -z "${ZF_TARGET_USER}" ] && ZF_TARGET_USER="${USER}"
