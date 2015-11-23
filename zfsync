@@ -51,7 +51,7 @@ while getopts 'dhH:iI:qT:U:' opt; do
         i) ZF_INCREMENTAL=1;;
         I) ZF_IDENTITY_FILE=${OPTARG};;
         q) ZF_SILENT=1;;
-        T) ZF_TARGET_ZFS=${OPTARG};;
+        T) ZF_TARGET_ZFS=${OPTARG%/*};;
         U) ZF_TARGET_USER=${OPTARG};;
         ?)
             zf_usage
@@ -61,7 +61,7 @@ while getopts 'dhH:iI:qT:U:' opt; do
 done
 shift "$((OPTIND - 1))"
 
-ZF_SOURCE_ZFS=${1}
+ZF_SOURCE_ZFS=${1%/*}
 
 # defaults and parameter checking
 [ -z "${ZF_TARGET_USER}" ] && ZF_TARGET_USER="${USER}"
@@ -108,8 +108,7 @@ if ! zf_zfs_has_matching_snapshots "${ZF_SOURCE_ZFS}" "${ZF_TARGET_ZFS}"; then
     # perform initial sync
     # TODO: fix basename stuff
     zf_msg "Sending initial snapshot ${oldest_snapshot}"
-    [ ${ZF_DEBUG} -eq 1 ] && cmd_verb="-v"
-    zf_zfs_sync "${ZF_SOURCE_ZFS}${oldest_snapshot}" "${ZF_TARGET_ZFS}/$(basename ${ZF_SOURCE_ZFS})" "${cmd_verb}"
+    zf_zfs_sync "${ZF_SOURCE_ZFS}${oldest_snapshot}" "${ZF_TARGET_ZFS}/$(basename ${ZF_SOURCE_ZFS})"
 
     zf_msg "Checking both sides again for matches"
 fi
@@ -129,8 +128,6 @@ fi
 
 zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
 # TODO: make -R optional
-# TODO: make -F optional
-[ ${ZF_DEBUG} -eq 1 ] && cmd_verb="-v"
 [ ${ZF_INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
-zf_zfs_sync "${ZF_SOURCE_ZFS}${latest_snapshot}" "${ZF_TARGET_ZFS}/$(basename ${ZF_SOURCE_ZFS})" "-R ${cmd_verb} ${cmd_inc} ${latest_match}"
+zf_zfs_sync "${ZF_SOURCE_ZFS}${latest_snapshot}" "${ZF_TARGET_ZFS}/$(basename ${ZF_SOURCE_ZFS})" "-R ${cmd_inc} ${latest_match}"
 zf_msg "Done"

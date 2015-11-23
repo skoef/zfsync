@@ -46,7 +46,7 @@ zf_zfs_snapshots() {
     local zfs=$1 remote=$2
     [ -z "${zfs}" ] && zf_error "zf_zfs_snapshots requires zfs parameter"
 
-    cmd="zfs list -H -o name -s creation -t snapshot -r ${zfs}"
+    cmd="zfs list -H -o name -s creation -t snapshot -r -d 1 ${zfs}"
     if [ "${remote}" = 1 ]; then
         zf_zfs_remote_cmd "${cmd}" | awk -F'@' '{print "@"$2}'
     else
@@ -119,6 +119,9 @@ zf_zfs_sync() {
     [ -z "${source}" -o -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
 
     [ ${ZF_LARGE_BLOCKS} -eq 1 ] && options="${options} -L"
+    [ ${ZF_DEBUG} -eq 1 ] && options="${options} -v"
+
+    # TODO: perhaps not always use -F
 
     zf_zfs_cmd "send ${options} ${source}" | \
         zf_zfs_remote_cmd "receive -F ${target}"
