@@ -3,6 +3,24 @@
 if [ -z "${LIB_ZFS_INCLUDED}" ]; then
 LIB_ZFS_INCLUDED=1
 
+zf_zfs_get_recursive() {
+    local zfs=$1
+    [ -z "${zfs}" ] && zf_error "zf_zfs_get_recursive requires zfs parameter"
+
+    zf_debug "listing recursive for ${zfs}"
+    zf_zfs_cmd "list -H -t filesystem -o name -r ${zfs}"
+}
+
+zf_zfs_has_childfs() {
+    local zfs=$1
+    [ -z "${zfs}" ] && zf_error "zf_zfs_has_childfs requires zfs parameter"
+
+    fses=$(zf_zfs_get_recursive ${zfs} | wc -l | awk '{print $1-1}')
+    zf_debug "zfs ${zfs} has ${fses} child filesystem(s)"
+
+    [ ${fses} -gt 0 ]
+}
+
 zf_zfs_is_user_allowed() {
     local user=$1 permissions=$2 zfs=$3 remote=$4
     [ -z "${permissions}" -o -z "${zfs}" ] && zf_error "zf_zfs_is_user_allowed requires permissions and zfs parameter"
@@ -118,11 +136,11 @@ zf_zfs_sync() {
     local source=$1 target=$2 options=$3
     [ -z "${source}" -o -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
 
+    [ ${ZF_SET_PROPERTIES} -eq 1 ] && options="${options} -p"
     [ ${ZF_LARGE_BLOCKS} -eq 1 ] && options="${options} -L"
     [ ${ZF_DEBUG} -eq 1 ] && options="${options} -v"
 
     # TODO: perhaps not always use -F
-
     zf_zfs_cmd "send ${options} ${source}" | \
         zf_zfs_remote_cmd "receive -F ${target}"
 }

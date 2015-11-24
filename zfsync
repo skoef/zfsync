@@ -3,7 +3,6 @@
 # XXX: ideas:
 # - compression
 # - custom zfsync zfs properties
-# - recursive sending
 # - check for large_blocks and use it if present
 
 # halt on error
@@ -39,8 +38,9 @@ ZF_DEBUG=0
 ZF_SILENT=0
 ZF_INCREMENTAL=0
 ZF_LARGE_BLOCKS=0
+ZF_SET_PROPERTIES=1
 
-while getopts 'dhH:iI:qT:U:' opt; do
+while getopts 'dhH:iI:PqT:U:' opt; do
     case ${opt} in
         d) ZF_DEBUG=1;;
         h)
@@ -50,6 +50,7 @@ while getopts 'dhH:iI:qT:U:' opt; do
         H) ZF_TARGET_HOST=${OPTARG};;
         i) ZF_INCREMENTAL=1;;
         I) ZF_IDENTITY_FILE=${OPTARG};;
+        P) ZF_SET_PROPERTIES=0;;
         q) ZF_SILENT=1;;
         T) ZF_TARGET_ZFS=${OPTARG%/};;
         U) ZF_TARGET_USER=${OPTARG};;
@@ -68,6 +69,12 @@ ZF_SOURCE_ZFS=${1%/}
 [ -z "${ZF_TARGET_HOST}" ] && zf_usage "no target ZFS specified"
 [ -z "${ZF_SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
 
+source_properties="hold,send"
+target_properties="receive,create,mount"
+if [ ${ZF_SET_PROPERTIES} -eq 1 ]; then
+    target_properties="${target_properties},userprop"
+fi
+
 # determine if we can use -L during sending
 if zf_zpool_has_feature "large_blocks" && \
     zf_zpool_has_feature "large_blocks" 1; then
@@ -78,56 +85,84 @@ fi
 # sanity check
 zf_msg "Checking source and target"
 if ! zf_zfs_exists "${ZF_SOURCE_ZFS}"; then
-    zf_error "source ZFS not found"
+    zf_error "source ZFS ${ZF_SOURCE_ZFS} not found"
 fi
 
 if ! zf_zfs_exists "${ZF_TARGET_ZFS}" 1; then
-    zf_error "target ZFS not found"
+    zf_error "target ZFS ${ZF_TARGET_USER} not found"
 fi
 
-# permissions check
-zf_msg "Checking permissions on source and target"
-if ! zf_zfs_is_user_allowed "${USER}" "hold,send" "${ZF_SOURCE_ZFS}"; then
-   zf_error "${USER} is not allowed to send ${ZF_SOURCE_ZFS}"
-fi
+# instead of using replication streams
+# we break recursive sends into individual filesystems
+# so we can control and report on each filesystem
+# more effectively
+zf_zfs_has_childfs ${ZF_SOURCE_ZFS} && recursive_send=1 || recursive_send=0
 
-# TODO: what if the other side is not mounted
-if ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "receive,create,mount,userprop" "${ZF_TARGET_ZFS}" 1; then
-   zf_error "${ZF_TARGET_USER} is not allowed to receive on ${ZF_TARGET_ZFS}"
-fi
-
-# look for matching snapshots
-if ! zf_zfs_has_matching_snapshots "${ZF_SOURCE_ZFS}" "${ZF_TARGET_ZFS}"; then
-    zf_warn "no matching snapshots between source and target"
-    oldest_snapshot=$(zf_zfs_snapshots "${ZF_SOURCE_ZFS}" | head -1)
-    # get oldest source snapshot for initial sync
-    if [ -z "${oldest_snapshot}" ]; then
-        zf_error "source ${ZF_SOURCE_ZFS} has no snapshots"
+for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
+    if [ ${recursive_send} -eq 1 ]; then
+        suffix=$(echo ${filesystem} | sed "s#^${ZF_SOURCE_ZFS}##")
+        target="${ZF_TARGET_ZFS}${suffix}"
+    else
+        target=${ZF_TARGET_ZFS}
     fi
 
-    # perform initial sync
-    # TODO: fix basename stuff
-    zf_msg "Sending initial snapshot ${oldest_snapshot}"
-    zf_zfs_sync "${ZF_SOURCE_ZFS}${oldest_snapshot}" "${ZF_TARGET_ZFS}/$(basename ${ZF_SOURCE_ZFS})"
+    # permissions check
+    zf_msg "Checking permissions on source and target"
+    if ! zf_zfs_is_user_allowed "${USER}" "${source_properties}" "${filesystem}"; then
+       zf_error "required local permissions for ${USER} on ${filesystem} not met: ${source_properties}"
+    fi
 
-    zf_msg "Checking both sides again for matches"
-fi
+    # TODO: what if the other side is not mounted
+    # TODO: if recursive, check childfs remotely as well
+    if ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "${target_properties}" "${ZF_TARGET_ZFS}" 1; then
+       zf_error "required remote permissions for ${ZF_TARGET_USER} on ${ZF_TARGET_ZFS} not met: ${target_properties}"
+    fi
 
-# perform incremental sync
-latest_match=$(zf_zfs_matching_snapshots "${ZF_SOURCE_ZFS}" "${ZF_TARGET_ZFS}" | tail -1)
-if [ -z "${latest_match}" ]; then
-    zf_error "no matches found between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
-fi
+    # look for matching snapshots
+    if ! zf_zfs_has_matching_snapshots "${filesystem}" "${target}"; then
+        zf_warn "no matching snapshots between source and target"
+        oldest_snapshot=$(zf_zfs_snapshots "${filesystem}" | head -1)
+        # get oldest source snapshot for initial sync
+        if [ -z "${oldest_snapshot}" ]; then
+            if [ ${recursive_send} -eq 1 ]; then
+                zf_msg "Source ${filesystem} has no snapshots"
+                continue
+            fi
 
-zf_debug "found matching snapshot ${latest_match}"
-latest_snapshot=$(zf_zfs_snapshots "${ZF_SOURCE_ZFS}" | tail -1)
-if [ "${latest_match}" = "${latest_snapshot}" ]; then
-    zf_msg "Both ends are in sync"
-    return
-fi
+            zf_error "source ${filesystem} has no snapshots"
+        fi
 
-zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
-# TODO: make -R optional
-[ ${ZF_INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
-zf_zfs_sync "${ZF_SOURCE_ZFS}${latest_snapshot}" "${ZF_TARGET_ZFS}/$(basename ${ZF_SOURCE_ZFS})" "-R ${cmd_inc} ${latest_match}"
+        # perform initial sync
+        zf_msg "Sending initial snapshot ${oldest_snapshot}"
+        if ! zf_zfs_sync "${filesystem}${oldest_snapshot}" "${target}"; then
+            [ ${recursive_send} -eq 0 ] && zf_error "failed sending initial snapshot ${filesystem}"
+            zf_warn "failed sending initial snapshot ${filesystem}"
+            continue
+        fi
+
+        zf_msg "Checking both sides again for matches"
+    fi
+
+    # perform incremental sync
+    latest_match=$(zf_zfs_matching_snapshots "${filesystem}" "${target}" | tail -1)
+    if [ -z "${latest_match}" ]; then
+        zf_error "no matches found between ${filesystem} and ${target}"
+    fi
+
+    zf_debug "found matching snapshot ${latest_match}"
+    latest_snapshot=$(zf_zfs_snapshots "${filesystem}" | tail -1)
+    if [ "${latest_match}" = "${latest_snapshot}" ]; then
+        zf_msg "Both ends are in sync for ${filesystem}"
+        continue
+    fi
+
+    zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
+    [ ${ZF_INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
+    if ! zf_zfs_sync "${filesystem}${latest_snapshot}" "${target}" "${cmd_inc} ${latest_match}"; then
+        [ ${recursive_send} -eq 0 ] && zf_error "failed sending ${filesystem} incrementally from ${latest_snapshot}"
+        zf_warn "failed sending ${filesystem} incrementally from ${latest_snapshot}"
+        continue
+    fi
+done
+
 zf_msg "Done"
