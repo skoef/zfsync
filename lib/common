@@ -7,7 +7,7 @@ zf_usage() {
     local msg=$1
     [ ! -z "${msg}" ] && echo "Error: ${msg}" >&2
     cat >&2 << EOT
-Usage: zfsync [-dhiPq] -H target_host -T target_zfs [-U target_user] [-I identity_file] source_zfs
+Usage: zfsync [-dhimMPq] -H target_host -T target_zfs [-U target_user] [-I identity_file] source_zfs
 
     source_zfs is the filesystem that needs syncing to a remote host
 
@@ -18,6 +18,8 @@ Options:
     -i                  send incremental stream between local and remote snapshot
                         instead of a stream package of all intermediary snapshots
     -I identity_file    use this key for authentication
+    -m                  only show matching snapshots and exit (mutually exclusive with -M)
+    -M                  only show missing snapshots and exit (mutually exclusive with -m)
     -P                  do not set user properties on remote end
     -q                  be more quiet
     -T target_zfs       ZFS on target host to send snapshots to [required]

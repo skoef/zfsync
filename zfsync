@@ -39,8 +39,10 @@ ZF_SILENT=0
 ZF_INCREMENTAL=0
 ZF_LARGE_BLOCKS=0
 ZF_SET_PROPERTIES=1
+ZF_MATCHING_SNAPSHOTS=0
+ZF_MISSING_SNAPSHOTS=0
 
-while getopts 'dhH:iI:PqT:U:' opt; do
+while getopts 'dhH:iI:mMPqT:U:' opt; do
     case ${opt} in
         d) ZF_DEBUG=1;;
         h)
@@ -50,6 +52,8 @@ while getopts 'dhH:iI:PqT:U:' opt; do
         H) ZF_TARGET_HOST=${OPTARG};;
         i) ZF_INCREMENTAL=1;;
         I) ZF_IDENTITY_FILE=${OPTARG};;
+        m) ZF_MATCHING_SNAPSHOTS=1;;
+        M) ZF_MISSING_SNAPSHOTS=1;;
         P) ZF_SET_PROPERTIES=0;;
         q) ZF_SILENT=1;;
         T) ZF_TARGET_ZFS=${OPTARG%/};;
@@ -68,6 +72,10 @@ ZF_SOURCE_ZFS=${1%/}
 [ -z "${ZF_TARGET_USER}" ] && ZF_TARGET_USER="${USER}"
 [ -z "${ZF_TARGET_HOST}" ] && zf_usage "no target ZFS specified"
 [ -z "${ZF_SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
+[ ${ZF_MATCHING_SNAPSHOTS} -eq 1 -a ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_usage "can't use -m and -M together"
+
+[ ${ZF_MATCHING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing common snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
+[ ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing missing snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
 
 source_properties="hold,send"
 target_properties="receive,create,mount"
@@ -76,7 +84,8 @@ if [ ${ZF_SET_PROPERTIES} -eq 1 ]; then
 fi
 
 # determine if we can use -L during sending
-if zf_zpool_has_feature "large_blocks" && \
+if [ ${ZF_MATCHING_SNAPSHOTS} -eq 0 -a ${ZF_MISSING_SNAPSHOTS} -eq 0 ] && \
+    zf_zpool_has_feature "large_blocks" && \
     zf_zpool_has_feature "large_blocks" 1; then
     zf_msg "Using large blocks while sending"
     ZF_LARGE_BLOCKS=1
@@ -98,6 +107,10 @@ fi
 # more effectively
 zf_zfs_has_childfs ${ZF_SOURCE_ZFS} && recursive_send=1 || recursive_send=0
 
+if [ ${recursive_send} -eq 1 ] && [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 -o ${ZF_MISSING_SNAPSHOTS} -eq 1 ]; then
+    zf_error "can't compare snapshots of filesystems with childs"
+fi
+
 for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     if [ ${recursive_send} -eq 1 ]; then
         suffix=$(echo ${filesystem} | sed "s#^${ZF_SOURCE_ZFS}##")
@@ -105,6 +118,29 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     else
         target=${ZF_TARGET_ZFS}
     fi
+
+    # if only looking for matching snapshots, show them now
+    if [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 ]; then
+        snapshots=$(zf_zfs_matching_snapshots ${ZF_SOURCE_ZFS} ${ZF_TARGET_ZFS})
+        if [ -z "${snapshots}" ]; then
+            zf_error "no matching snapshots found between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
+        fi
+
+        echo $snapshots | xargs -n 1 echo
+        exit
+    fi
+
+    # if only looking for missing snapshots, show them now
+    if [ ${ZF_MISSING_SNAPSHOTS} -eq 1 ]; then
+        snapshots=$(zf_zfs_missing_snapshots ${ZF_SOURCE_ZFS} ${ZF_TARGET_ZFS})
+        if [ -z "${snapshots}" ]; then
+            zf_error "no missing snapshots found between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
+        fi
+
+        echo $snapshots | xargs -n 1 echo
+        exit
+    fi
+
 
     # permissions check
     zf_msg "Checking permissions on source and target"
