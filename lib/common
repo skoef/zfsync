@@ -50,4 +50,11 @@ zf_msg(){
     return 0
 }
 
+zf_has_binary() {
+    local bin=$1 path
+    path=$(which ${bin})
+
+    [ ! -z "${path}" ] && [ -x ${path} ]
+}
+
 fi

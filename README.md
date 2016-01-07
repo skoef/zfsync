@@ -11,12 +11,13 @@ syncs all filesystems from zroot/precious/data to the remote host.
 
 **Usage:**
 ```
-zfsync [-dhimMPq] -H target_host -T target_zfs [-U target_user] [-I identity_file] source_zfs
+zfsync [-dBhimMPq] -H target_host -T target_zfs [-U target_user] [-I identity_file] source_zfs
 
     source_zfs is the filesystem that needs syncing to a remote host
 
 Options:
     -d                  enable debugging (negates -q)
+    -B                  even when mbuffer is detected, don't buffer
     -h                  show you this help page
     -H target_host      host to send snapshots to [required]
     -i                  send incremental stream between local and remote snapshot
