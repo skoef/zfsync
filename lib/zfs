@@ -53,8 +53,11 @@ zf_zfs_is_user_allowed() {
         #zf_debug "testing allow"
         #zf_debug "${allow}"
         #zf_debug "against ${regex}"
-        echo ${allow} | grep -q -E \
-            -e "${regex}" || return 1
+        if ! echo ${allow} | grep -q -E -e "${regex}"; then
+            zf_debug "permission ${permission} not found for ${user}"
+            return 1
+        fi
+
     done
 
     return 0
