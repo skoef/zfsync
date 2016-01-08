@@ -17,7 +17,7 @@ zf_zpool_has_feature() {
         output=$(zf_zpool_cmd "${cmd}")
     fi
 
-    echo ${output} | grep -q -E '(enabled|active)'
+    echo ${output} | grep -q -E '^(enabled|active)$'
 }
 
 zf_zpool_cmd() {
