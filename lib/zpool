@@ -4,17 +4,20 @@ if [ -z "${LIB_ZPOOL_INCLUDED}" ]; then
 LIB_ZPOOL_INCLUDED=1
 
 zf_zpool_has_feature() {
-    local feature=$1 remote=$2 output cmd
+    local zpool=$1 feature=$2 remote=$3 output cmd
     [ -z "${feature}" ] && zf_error "zpool_has_feature requires feature parameter"
 
-    cmd="get -H -o value feature@${feature}"
+    # make sure feature starts with feature@
+    expr "${feature}" : '^feature@' > /dev/null || feature="feature@${feature}"
+
+    cmd="get ${feature} ${zpool} | awk '/^${zpool} / {print \$3}'"
     if [ "${remote}" = 1 ]; then
         output=$(zf_zpool_remote_cmd "${cmd}")
     else
         output=$(zf_zpool_cmd "${cmd}")
     fi
 
-    echo ${output} | grep -q -e "enabled"
+    echo ${output} | grep -q -E '(enabled|active)'
 }
 
 zf_zpool_cmd() {

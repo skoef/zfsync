@@ -88,8 +88,8 @@ fi
 
 # determine if we can use -L during sending
 if [ ${ZF_MATCHING_SNAPSHOTS} -eq 0 -a ${ZF_MISSING_SNAPSHOTS} -eq 0 ] && \
-    zf_zpool_has_feature "large_blocks" && \
-    zf_zpool_has_feature "large_blocks" 1; then
+    zf_zpool_has_feature ${ZF_SOURCE_ZFS%%/*} "large_blocks" && \
+    zf_zpool_has_feature ${ZF_TARGET_ZFS%%/*} "large_blocks" 1; then
     zf_msg "Using large blocks while sending"
     ZF_LARGE_BLOCKS=1
 fi
