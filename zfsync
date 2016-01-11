@@ -44,10 +44,16 @@ ZF_MISSING_SNAPSHOTS=0
 ZF_HAS_MBUFFER=0
 ZF_BUFFER=1
 
-while getopts 'dBhH:iI:mMPqT:U:' opt; do
+# set defaults, only to be overriden
+# by configuration file
+ZF_MBUFFER_SIZE="1G"
+ZF_MBUFFER_FORCE_REMOTE=
+
+while getopts 'dBf:hH:iI:mMPqT:U:' opt; do
     case ${opt} in
         d) ZF_DEBUG=1;;
         B) ZF_BUFFER=0;;
+        f) ZF_CONFIG_FILE=${OPTARG};;
         h)
             zf_usage
             exit 0
@@ -70,6 +76,14 @@ done
 shift "$((OPTIND - 1))"
 
 ZF_SOURCE_ZFS=${1%/}
+
+# source configuration file
+if [ ! -z "${ZF_CONFIG_FILE}" ]; then
+    [ ! -f "${ZF_CONFIG_FILE}" ] && zf_error "configuration file ${ZF_CONFIG_FILE} not found"
+    [ ! -r "${ZF_CONFIG_FILE}" ] && zf_error "configuration file ${ZF_CONFIG_FILE} not readable"
+
+    . ${ZF_CONFIG_FILE}
+fi
 
 # defaults and parameter checking
 [ -z "${ZF_TARGET_USER}" ] && ZF_TARGET_USER="${USER}"

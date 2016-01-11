@@ -148,6 +148,10 @@ zf_zfs_remote_cmd() {
 
     # ensure command starts with 'zfs '
     expr "${cmd}" : '^zfs ' >/dev/null || cmd="zfs ${cmd}"
+    if [ ! -z "${ZF_MBUFFER_FORCE_REMOTE}" ] && echo ${cmd} | grep '^zfs receive'; then
+        zf_debug "forcing use of mbuffer remotely"
+        cmd="mbuffer -s 128k -m ${ZF_MBUFFER_SIZE} | ${cmd}"
+    fi
     zf_debug "running remote command: ${cmd}"
 
     zf_ssh_cmd "${cmd}"
@@ -163,7 +167,7 @@ zf_zfs_sync() {
 
     # pipe stream through mbuffer when available
     if [ ${ZF_HAS_MBUFFER} -eq 1 ]; then
-        pipe_arg=" | mbuffer -s 128k -m 1G"
+        pipe_arg=" | mbuffer -s 128k -m ${ZF_MBUFFER_SIZE}"
     fi
 
     # TODO: perhaps not always use -F
