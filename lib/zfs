@@ -163,9 +163,15 @@ zf_zfs_sync() {
     local source=$1 target=$2 options=$3 send_pipe_arg recv_pipe_arg
     [ -z "${source}" -o -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
 
-    [ ${ZF_SET_PROPERTIES} -eq 1 ] && options="${options} -p"
     [ ${ZF_LARGE_BLOCKS} -eq 1 ] && options="${options} -L"
     [ ${ZF_DEBUG} -eq 1 ] && options="${options} -v"
+
+
+    if [ ${ZF_SET_PROPERTIES} -eq 1 ]; then
+        options="${options} -p"
+        # filter warning messages
+        [ ${ZF_DEBUG} -eq 0 ] && recv_pipe_arg="2>&1 | grep -vE 'cannot receive [^ ]{1,} property'"
+    fi
 
     # pipe stream through mbuffer when available
     if [ ! -z "$(zf_mbuffer_get_cmd)" ]; then
