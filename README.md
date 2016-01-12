@@ -3,8 +3,10 @@
 
 Using ZFS opens up the really cool possibility to send snapshots to remote ZFS enabled servers, but managing synchronization of your snapshots can turn out more difficult. `zfsync` makes keeping these snapshots in sync easy.
 
+It offers a purely in shell written script, and works without any dependencies on FreeBSD systems.
+
 TL;DR:
- 
+
 `zfsync -H remote.host -T tank/backups/myhost zroot/precious/data`
 
 syncs all filesystems from zroot/precious/data to the remote host.
