@@ -1,0 +1,22 @@
+#!/bin/sh
+
+if [ -z "${LIB_MBUFFER_INCLUDED}" ]; then
+LIB_MBUFFER_INCLUDED=1
+
+zf_mbuffer_get_cmd() {
+    local remote=$1 cmd
+
+    # local sends, without buffering
+    [ "${remote}" != 1 -a ${ZF_HAS_MBUFFER} -eq 0 ] && return
+    # remote sends, without buffering
+    [ "${remote}" = 1 -a -z "${ZF_MBUFFER_FORCE_REMOTE}" ] && return
+    [ "${remote}" = 1 ] && zf_debug "forcing use of mbuffer remotely" \
+        || zf_debug "buffering sends"
+
+    cmd="mbuffer -s 128k -m ${ZF_MBUFFER_SIZE}"
+    [ ${ZF_DEBUG} -eq 0 ] && cmd="${cmd} -q"
+
+    echo ${cmd}
+}
+
+fi

@@ -23,6 +23,7 @@ else
 fi
 
 . "${LIB}/common"
+. "${LIB}/mbuffer"
 . "${LIB}/ssh"
 . "${LIB}/zfs"
 . "${LIB}/zpool"
@@ -109,16 +110,13 @@ if [ ${ZF_MATCHING_SNAPSHOTS} -eq 0 -a ${ZF_MISSING_SNAPSHOTS} -eq 0 ] && \
 fi
 
 # determine if mbuffer is available
-if zf_has_binary mbuffer; then
-    zf_debug "mbuffer found within PATH"
-    if [ ${ZF_BUFFER} -eq 0 ]; then
-        zf_debug "buffering disabled by user"
-    else
+if [ ${ZF_BUFFER} -eq 1 ]; then
+    if zf_has_binary mbuffer; then
         zf_msg "Buffering streams with mbuffer"
         ZF_HAS_MBUFFER=1
     fi
 else
-    zf_debug "no mbuffer found"
+    zf_debug "buffering disabled by user"
 fi
 
 # sanity check
