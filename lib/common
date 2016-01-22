@@ -54,11 +54,12 @@ zf_has_binary() {
     local bin=$1 path
     path=$(which ${bin})
 
-    if [ ! -z "${path}" ] && [ -x ${path} ]; then
-        zf_debug "${bin} found in PATH"
-    else
+    if [ -z "${path}" ] || [ ! -x ${path} ]; then
         zf_debug "${bin} not found in PATH"
+        return 1
     fi
+
+    zf_debug "${bin} found in PATH"
 }
 
 fi
