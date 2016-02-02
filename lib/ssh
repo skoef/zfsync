@@ -11,6 +11,10 @@ zf_ssh_cmd() {
     [ ! -z "${ZF_TARGET_USER}" ] && user_arg="-l ${ZF_TARGET_USER}"
 
     zf_debug "ssh args: ${identity_arg} ${user_arg}"
+    # wrap command in bourne shell
+    # so we know output redirects work
+    # as expected
+    cmd="sh -c \"${cmd}\""
 
     ssh \
         ${identity_arg} \
