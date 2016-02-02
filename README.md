@@ -5,13 +5,13 @@ Using ZFS opens up the really cool possibility to send snapshots to remote ZFS e
 
 It offers a purely in shell written script, and works without any dependencies on FreeBSD systems.
 
-TL;DR:
+##TL;DR:
 
 `zfsync -H remote.host -T tank/backups/myhost zroot/precious/data`
 
-syncs all filesystems from zroot/precious/data to the remote host.
+syncs all filesystems from `zroot/precious/data` to the remote host.
 
-**Usage:**
+##Usage:
 ```
 zfsync [-dBhimMPq] -H target_host -T target_zfs [-U target_user] [-I identity_file] source_zfs
 
@@ -32,3 +32,21 @@ Options:
     -T target_zfs       ZFS on target host to send snapshots to [required]
     -U target_user      alternative user to authenticate as on remote host
 ```
+
+##Preparing remote host
+
+Currently, `zfsync` should just work as long as the remote host is running FreeBSD and you have access to it over SSH. While it is certainly possible, you really shouldn't use the `root` user for receiving the ZFS snapshots (arguably for no SSH access at all, actually). Instead, set up a non-privileged user, most preferably with public key access, on the remote host. Here is an example:
+
+**remote host:**
+```
+pw useradd -n zfsync -d /home/zfsync -m -w random -s /bin/sh
+mkdir ~zfsync/.ssh/
+ssh-keygen -f ~zfsync/.ssh/id_rsa
+chown -R zfsync ~zfsync/.ssh
+zfs allow -u zfsync create,mount,receive tank/backups/myhost
+```
+to create non-privileged user `zfsync`, set up a public/private key and give user `zfsync` minimal permissions for receiving ZFS snapshots `tank/backups/myhost` (`zfsync` will warn you otherwise). The public key `~zfsync/.ssh/id_rsa.pub` should be copied to the source host via a secure channel, so it could be pointed to with `-I` while using `-U zfsync` on the next sync. You should add a strong passphrase to the key file, and use ssh-agent so you can cron syncing your filesystems.
+
+##Known issues
+- has to be tested on GNU/Linux with ZFSOnLinux or \*Solaris
+- zfsync does not support multiple `source_zfs` arguments yet
