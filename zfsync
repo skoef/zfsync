@@ -95,12 +95,6 @@ fi
 [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing common snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
 [ ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing missing snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
 
-source_properties="hold,send"
-target_properties="receive,create,mount"
-if [ ${ZF_SET_PROPERTIES} -eq 1 ]; then
-    target_properties="${target_properties},userprop"
-fi
-
 # determine if we can use -L during sending
 if [ ${ZF_MATCHING_SNAPSHOTS} -eq 0 -a ${ZF_MISSING_SNAPSHOTS} -eq 0 ] && \
     zf_zpool_has_feature ${ZF_SOURCE_ZFS%%/*} "large_blocks" && \
@@ -169,17 +163,22 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         exit
     fi
 
-
-    # permissions check
+    # local permissions check
     zf_msg "Checking permissions on source and target"
-    if ! zf_zfs_is_user_allowed "${USER}" "${source_properties}" "${filesystem}"; then
+    if ! zf_zfs_is_user_allowed "${USER}" "hold,send" "${filesystem}"; then
        zf_error "required local permissions for ${USER} on ${filesystem} not met: ${source_properties}"
     fi
 
+    # remote permissions check
     # TODO: what if the other side is not mounted
     # TODO: if recursive, check childfs remotely as well
-    if ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "${target_properties}" "${ZF_TARGET_ZFS}" 1; then
+    if ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "receive,create,mount" "${ZF_TARGET_ZFS}" 1; then
        zf_error "required remote permissions for ${ZF_TARGET_USER} on ${ZF_TARGET_ZFS} not met: ${target_properties}"
+    fi
+
+    if [ ${ZF_SET_PROPERTIES} -eq 1 ] && ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "userprop" "${ZF_TARGET_ZFS}" 1; then
+        zf_warn "${ZF_TARGET_USER} lacks 'userprop' permission on ${ZF_TARGET_ZFS}, implying -P"
+        ZF_SET_PROPERTIES=0
     fi
 
     # look for matching snapshots
