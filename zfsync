@@ -88,7 +88,8 @@ fi
 
 # defaults and parameter checking
 [ -z "${ZF_TARGET_USER}" ] && ZF_TARGET_USER="${USER}"
-[ -z "${ZF_TARGET_HOST}" ] && zf_usage "no target ZFS specified"
+[ -z "${ZF_TARGET_HOST}" ] && zf_usage "no target host specified"
+[ -z "${ZF_TARGET_ZFS}" ] && zf_usage "no target ZFS specified"
 [ -z "${ZF_SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
 [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 -a ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_usage "can't use -m and -M together"
 
