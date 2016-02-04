@@ -165,14 +165,16 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
 
     # local permissions check
     zf_msg "Checking permissions on source and target"
-    if ! zf_zfs_is_user_allowed "${USER}" "hold,send" "${filesystem}"; then
+    source_properties="hold,send"
+    if ! zf_zfs_is_user_allowed "${USER}" "${source_properties}" "${filesystem}"; then
        zf_error "required local permissions for ${USER} on ${filesystem} not met: ${source_properties}"
     fi
 
     # remote permissions check
     # TODO: what if the other side is not mounted
     # TODO: if recursive, check childfs remotely as well
-    if ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "receive,create,mount" "${ZF_TARGET_ZFS}" 1; then
+    target_properties="receive,create,mount"
+    if ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "${target_properties}" "${ZF_TARGET_ZFS}" 1; then
        zf_error "required remote permissions for ${ZF_TARGET_USER} on ${ZF_TARGET_ZFS} not met: ${target_properties}"
     fi
 
