@@ -14,7 +14,7 @@ zf_ssh_cmd() {
     # wrap command in bourne shell
     # so we know output redirects work
     # as expected
-    cmd="sh -c \"${cmd}\""
+    cmd="sh -c \"export PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin; ${cmd}\""
 
     ssh \
         ${identity_arg} \
