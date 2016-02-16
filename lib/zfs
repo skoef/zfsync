@@ -160,7 +160,8 @@ zf_zfs_remote_cmd() {
 }
 
 zf_zfs_sync() {
-    local source=$1 target=$2 options=$3 send_pipe_arg recv_pipe_arg
+    local source=$1 target=$2 options=$3 send_pipe_arg recv_pipe_arg \
+        remote_pid timeout req_buffer mbuffer_port
     [ -z "${source}" -o -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
 
     [ ${ZF_LARGE_BLOCKS} -eq 1 ] && options="${options} -L"
@@ -178,9 +179,33 @@ zf_zfs_sync() {
         send_pipe_arg="| $(zf_mbuffer_get_cmd)"
     fi
 
-    # TODO: perhaps not always use -F
-    zf_zfs_cmd "send ${options} ${source} ${send_pipe_arg}" | \
-        zf_zfs_remote_cmd "zfs receive -F ${target} ${recv_pipe_arg}"
+
+    # prepare mbuffer on remote machine
+    # for now assume port 5000, which I opened up for
+    # testing purposes on my target machine
+    req_buffer=50
+    mbuffer_port=5000
+    zf_ssh_cmd "mbuffer -e -P ${req_buffer} -s 128k -m ${ZF_MBUFFER_SIZE} -I ${mbuffer_port} -v 4 | zfs receive ${target}" &
+    remote_pid=${!}
+    trap "zf_debug \"killing remote mbuffer on local PID ${remote_pid}\"; kill ${remote_pid}" EXIT TERM
+    zf_debug "remote mbuffer runs on ${remote_pid}"
+    timeout=10
+    zf_debug "waiting for remote proces 'zfs receive ${target}'"
+    while true; do
+        sleep 1
+        timeout=$(let ${timeout} -1)
+        if zf_ssh_cmd "pgrep -q -f \"zfs receive ${target}\""; then
+            zf_debug "remote process waiting, ${timeout} secs left"
+            break
+        fi
+
+        if [ ${timeout} -le 1 ]; then
+            zf_error "timeout in waiting for remote mbuffer"
+        fi
+    done
+    zf_zfs_cmd "send ${options} ${source}" | \
+		mbuffer -s 128k -m ${ZF_MBUFFER_SIZE} -O "${ZF_TARGET_HOST}:${mbuffer_port}" -v 4 -p ${req_buffer} -e
+    wait
 }
 
 fi
