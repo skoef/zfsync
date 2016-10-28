@@ -234,6 +234,34 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         zf_warn "failed sending ${filesystem} incrementally from ${latest_snapshot}"
         continue
     fi
+
+    # TODO: implement something to set local and remote retention
+    ZF_LOCAL_RETENTION=50
+    if [ ! -z "${ZF_LOCAL_RETENTION}" ]; then
+        zf_msg "Applying local retention of ${ZF_LOCAL_RETENTION} snapshots"
+        matches=$(zf_zfs_matching_snapshots ${filesystem} ${target})
+        last_match=$(echo ${matches} | awk '{print $NF}')
+        snapshots=$(zf_zfs_snapshots ${filesystem})
+
+        # TODO: if retention is specified in xD or xW, calculate
+        # TODO: make sure ZF_LOCAL_RETENTION is not negative or even at least 1
+        # which count is relevant
+        count=$(echo ${snapshots} | wc -w | awk '{print $1}')
+        zf_debug "$((${count} - ${ZF_LOCAL_RETENTION})) snapshots will be removed"
+        for snapshot in $(zf_zfs_snapshots ${filesystem}); do
+            if [ "${snapshot}" = "${last_match}" ]; then
+                zf_warn "not removing last match ${last_match} or beyond, since this would break replication"
+                break
+            fi
+
+            zf_zfs_destroy ${filesystem} ${snapshot}
+            count=$((${count} - 1))
+            if [ "${count}" -le "${ZF_LOCAL_RETENTION}" ]; then
+                zf_msg "retention kept at ${count} snapshots"
+                break
+            fi
+        done
+    fi
 done
 
 zf_msg "Done"
