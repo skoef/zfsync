@@ -13,6 +13,8 @@ unset LANG
 # force PATH
 PATH=${PATH}:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin
 
+# allow libraries to be found relative to
+# current working directory for developing
 if [ -f "./lib/common" ]; then
     LIB="./lib"
 elif [ -d "/usr/local/lib/zfsync" ]; then
@@ -22,6 +24,7 @@ else
     exit 1
 fi
 
+# include libraries
 . "${LIB}/common"
 . "${LIB}/mbuffer"
 . "${LIB}/ssh"
@@ -180,12 +183,14 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     fi
 
     if [ ${ZF_SET_PROPERTIES} -eq 1 ] && ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "userprop" "${ZF_TARGET_ZFS}" 1; then
-        zf_warn "${ZF_TARGET_USER} lacks 'userprop' permission on ${ZF_TARGET_ZFS}, disabling -P"
+        zf_warn "${ZF_TARGET_USER} lacks 'userprop' permission on ${ZF_TARGET_ZFS}, implying -P"
         ZF_SET_PROPERTIES=0
     fi
 
+    zf_msg "Looking for matching snapshots between ${filesystem} and ${target}"
+    matches=$(zf_zfs_matching_snapshots "${filesystem}" "${target}")
     # look for matching snapshots
-    if ! zf_zfs_has_matching_snapshots "${filesystem}" "${target}"; then
+    if [ -z "${matches}" ]; then
         zf_warn "no matching snapshots between source and target"
         oldest_snapshot=$(zf_zfs_snapshots "${filesystem}" | head -1)
         # get oldest source snapshot for initial sync
@@ -210,12 +215,12 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     fi
 
     # perform incremental sync
-    latest_match=$(zf_zfs_matching_snapshots "${filesystem}" "${target}" | tail -1)
+    latest_match=$(echo ${matches} | awk '{print $NF}')
     if [ -z "${latest_match}" ]; then
         zf_error "no matches found between ${filesystem} and ${target}"
     fi
 
-    zf_debug "found matching snapshot ${latest_match}"
+    zf_debug "latest matching snapshot found: ${latest_match}"
     latest_snapshot=$(zf_zfs_snapshots "${filesystem}" | tail -1)
     if [ "${latest_match}" = "${latest_snapshot}" ]; then
         zf_msg "Both ends are in sync for ${filesystem}"

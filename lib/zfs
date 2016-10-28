@@ -97,7 +97,7 @@ zf_zfs_matching_snapshots() {
     printf "%s\n" $(zf_zfs_snapshots "${remote_zfs}" 1) > ${tmp_remote}
 
     # show matches
-    comm -12 ${tmp_local} ${tmp_remote}
+    comm -12 ${tmp_local} ${tmp_remote} || true
     rm ${tmp_local} ${tmp_remote}
 }
 
