@@ -183,4 +183,15 @@ zf_zfs_sync() {
         zf_zfs_remote_cmd "zfs receive -F ${target} ${recv_pipe_arg}"
 }
 
+zf_zfs_destroy() {
+    local filesystem=$1 snapshot=$2
+    [ -z "${filesystem} " -o -z "${snapshot}" ] && zf_error "zf_zfs_destroy requires filesystem and snapshot parameter"
+
+    echo ${snapshot} | grep -q '^@' || zf_error "snapshot should start with @: ${snapshot}"
+
+    zf_zfs_exists "${filesystem}${snapshot}" || zf_error "snapshot ${filesystem}${snapshot} doesn't exists"
+
+    zf_zfs_cmd "destroy ${filesystem}${snapshot}"
+}
+
 fi
