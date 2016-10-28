@@ -10,7 +10,7 @@ zf_zpool_has_feature() {
     # make sure feature starts with feature@
     expr "${feature}" : '^feature@' > /dev/null || feature="feature@${feature}"
 
-    cmd="get ${feature} ${zpool} | awk '/^${zpool} / {print \$3}'"
+    cmd="get -H -o value ${feature} ${zpool}"
     if [ "${remote}" = 1 ]; then
         output=$(zf_zpool_remote_cmd "${cmd}")
     else
