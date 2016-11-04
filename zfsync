@@ -239,58 +239,12 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     fi
     zf_msg "Both ends are in sync for ${filesystem}"
 
-    # TODO: implement something to set local and remote retention (zf_zfs_is_user_allowed "destroy")
-    # TODO: check for proper permission for destroying snapshots
-    if [ ! -z "${ZF_LOCAL_RETENTION}" ]; then
-        zf_msg "Applying local retention of ${ZF_LOCAL_RETENTION} snapshots"
-        matches=$(zf_zfs_matching_snapshots ${filesystem} ${target})
-        last_match=$(echo ${matches} | awk '{print $NF}')
-        snapshots=$(zf_zfs_snapshots ${filesystem})
-
-        # TODO: if retention is specified in xD or xW, calculate
-        # TODO: make sure ZF_LOCAL_RETENTION is not negative or even at least 1
-        # which count is relevant
-        count=$(echo ${snapshots} | wc -w | awk '{print $1}')
-        zf_debug "$((${count} - ${ZF_LOCAL_RETENTION})) snapshots will be removed"
-        for snapshot in $(zf_zfs_snapshots ${filesystem}); do
-            if [ "${snapshot}" = "${last_match}" ]; then
-                zf_warn "not removing last match ${last_match} or beyond, since this would break replication"
-                break
-            fi
-
-            zf_zfs_destroy ${filesystem} ${snapshot}
-            count=$((${count} - 1))
-            if [ "${count}" -le "${ZF_LOCAL_RETENTION}" ]; then
-                zf_msg "Local retention kept at ${count} snapshots"
-                break
-            fi
-        done
-    fi
-
-    if [ ! -z "${ZF_REMOTE_RETENTION}" ]; then
-        zf_msg "Applying remote retention of ${ZF_REMOTE_RETENTION} snapshots"
-        matches=$(zf_zfs_matching_snapshots ${filesystem} ${target})
-        last_match=$(echo ${matches} | awk '{print $NF}')
-        snapshots=$(zf_zfs_snapshots ${target} 1)
-
-        # TODO: if retention is specified in xD or xW, calculate
-        # TODO: make sure ZF_REMOTE_RETENTION is not negative or even at least 1
-        # which count is relevant
-        count=$(echo ${snapshots} | wc -w | awk '{print $1}')
-        zf_debug "$((${count} - ${ZF_REMOTE_RETENTION})) snapshots will be removed"
-        for snapshot in $(zf_zfs_snapshots ${target} 1); do
-            if [ "${snapshot}" = "${last_match}" ]; then
-                zf_warn "not removing last match ${last_match} or beyond, since this would break replication"
-                break
-            fi
-
-            zf_zfs_destroy ${target} ${snapshot} 1
-            count=$((${count} - 1))
-            if [ "${count}" -le "${ZF_REMOTE_RETENTION}" ]; then
-                zf_msg "Remote retention kept at ${count} snapshots"
-                break
-            fi
-        done
+    # TODO: check for proper permission for destroying snapshots (zf_zfs_is_user_allowed "destroy")
+    # TODO: if retention is specified in xD or xW, calculate
+    if [ ! -z "${ZF_LOCAL_RETENTION}" -o ! -z "${ZF_REMOTE_RETENTION}" ]; then
+        last_match=$(zf_zfs_matching_snapshots ${filesystem} ${target} | tail -1)
+        [ ! -z "${ZF_LOCAL_RETENTION}" ] && zf_zfs_apply_retention ${filesystem} ${ZF_LOCAL_RETENTION} ${last_match}
+        [ ! -z "${ZF_REMOTE_RETENTION}" ] && zf_zfs_apply_retention ${target} ${ZF_REMOTE_RETENTION} ${last_match} 1
     fi
 done
 
