@@ -239,12 +239,11 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     fi
     zf_msg "Both ends are in sync for ${filesystem}"
 
-    # TODO: check for proper permission for destroying snapshots (zf_zfs_is_user_allowed "destroy")
     # TODO: if retention is specified in xD or xW, calculate
     if [ ! -z "${ZF_LOCAL_RETENTION}" -o ! -z "${ZF_REMOTE_RETENTION}" ]; then
         last_match=$(zf_zfs_matching_snapshots ${filesystem} ${target} | tail -1)
-        [ ! -z "${ZF_LOCAL_RETENTION}" ] && zf_zfs_apply_retention ${filesystem} ${ZF_LOCAL_RETENTION} ${last_match}
-        [ ! -z "${ZF_REMOTE_RETENTION}" ] && zf_zfs_apply_retention ${target} ${ZF_REMOTE_RETENTION} ${last_match} 1
+        [ ! -z "${ZF_LOCAL_RETENTION}" ] && zf_zfs_apply_retention ${filesystem} ${ZF_LOCAL_RETENTION} ${last_match} ${USER}
+        [ ! -z "${ZF_REMOTE_RETENTION}" ] && zf_zfs_apply_retention ${target} ${ZF_REMOTE_RETENTION} ${last_match} ${ZF_TARGET_USER} 1
     fi
 done
 

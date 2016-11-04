@@ -200,11 +200,16 @@ zf_zfs_destroy() {
 }
 
 zf_zfs_apply_retention() {
-    local filesystem=$1 retention=$2 limit=$3 remote=$4 snapshots count
-    [ -z "${filesystem}" -o -z "${retention}" -o -z "${limit}" ] && zf_error "zf_zfs_apply_retention requires filesystem, retention and limit parameter"
+    local filesystem=$1 retention=$2 limit=$3 user=$4 remote=$5 snapshots count
+    [ -z "${filesystem}" -o -z "${retention}" -o -z "${limit}" -o -z "${user}" ] && zf_error "zf_zfs_apply_retention requires filesystem, retention, limit and user parameter"
 
     echo ${retention} | grep -q '^[0-9]\+$' || zf_error "retention should be given numerically"
     [ ${retention} -le 0 ] && zf_error "retention should be at least 1, not ${retention}"
+
+    if ! zf_zfs_is_user_allowed "${user}" "destroy" "${filesystem}" ${remote}; then
+        zf_warn "not keeping retention, user ${user} has no delete permission on ${filesystem}"
+        return 1
+    fi
 
     zf_msg "Applying retention of ${retention} snapshots to ${filesystem}"
     snapshots=$(zf_zfs_snapshots ${filesystem} ${remote})
@@ -213,7 +218,7 @@ zf_zfs_apply_retention() {
     count=$(echo ${snapshots} | wc -w | awk '{print $1}')
     if [ ${count} -le ${retention} ]; then
         zf_debug "number of snapshots (${count}) below or equal to desired retention (${retention})"
-        return
+        return 0
     fi
 
     zf_debug "$((count - retention)) snapshots will be removed"
