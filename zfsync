@@ -47,13 +47,15 @@ ZF_MATCHING_SNAPSHOTS=0
 ZF_MISSING_SNAPSHOTS=0
 ZF_HAS_MBUFFER=0
 ZF_BUFFER=1
+ZF_LOCAL_RETENTION=
+ZF_REMOTE_RETENTION=
 
 # set defaults, only to be overriden
 # by configuration file
 ZF_MBUFFER_SIZE="1G"
 ZF_MBUFFER_FORCE_REMOTE=
 
-while getopts 'dBf:hH:iI:mMPqT:U:' opt; do
+while getopts 'dBf:hH:iI:k:K:mMPqT:U:' opt; do
     case ${opt} in
         d) ZF_DEBUG=1;;
         B) ZF_BUFFER=0;;
@@ -65,6 +67,8 @@ while getopts 'dBf:hH:iI:mMPqT:U:' opt; do
         H) ZF_TARGET_HOST=${OPTARG};;
         i) ZF_INCREMENTAL=1;;
         I) ZF_IDENTITY_FILE=${OPTARG};;
+        k) ZF_LOCAL_RETENTION=${OPTARG};;
+        K) ZF_REMOTE_RETENTION=${OPTARG};;
         m) ZF_MATCHING_SNAPSHOTS=1;;
         M) ZF_MISSING_SNAPSHOTS=1;;
         P) ZF_SET_PROPERTIES=0;;
@@ -95,6 +99,7 @@ fi
 [ -z "${ZF_TARGET_ZFS}" ] && zf_usage "no target ZFS specified"
 [ -z "${ZF_SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
 [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 -a ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_usage "can't use -m and -M together"
+# TODO: check ZF_*_RETENTION with regexp
 
 [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing common snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
 [ ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing missing snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
@@ -238,7 +243,6 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
 
     # TODO: implement something to set local and remote retention (zf_zfs_is_user_allowed "destroy")
     # TODO: check for proper permission for destroying snapshots
-    ZF_LOCAL_RETENTION=50
     if [ ! -z "${ZF_LOCAL_RETENTION}" ]; then
         zf_msg "Applying local retention of ${ZF_LOCAL_RETENTION} snapshots"
         matches=$(zf_zfs_matching_snapshots ${filesystem} ${target})
@@ -265,7 +269,6 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         done
     fi
 
-    ZF_REMOTE_RETENTION=100
     if [ ! -z "${ZF_REMOTE_RETENTION}" ]; then
         zf_msg "Applying remote retention of ${ZF_REMOTE_RETENTION} snapshots"
         matches=$(zf_zfs_matching_snapshots ${filesystem} ${target})
