@@ -227,19 +227,17 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
 
     zf_debug "latest matching snapshot found: ${latest_match}"
     latest_snapshot=$(zf_zfs_snapshots "${filesystem}" | tail -1)
-    if [ "${latest_match}" = "${latest_snapshot}" ]; then
-        zf_msg "Both ends are in sync for ${filesystem}"
-        continue
-        # TODO: but we still might want to apply retention.
+    # latest snapshots on both sides don't match
+    if [ "${latest_match}" != "${latest_snapshot}" ]; then
+        zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
+        [ ${ZF_INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
+        if ! zf_zfs_sync "${filesystem}${latest_snapshot}" "${target}" "${cmd_inc} ${latest_match}"; then
+            [ ${recursive_send} -eq 0 ] && zf_error "failed sending ${filesystem} incrementally from ${latest_snapshot}"
+            zf_warn "failed sending ${filesystem} incrementally from ${latest_snapshot}"
+            continue
+        fi
     fi
-
-    zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
-    [ ${ZF_INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
-    if ! zf_zfs_sync "${filesystem}${latest_snapshot}" "${target}" "${cmd_inc} ${latest_match}"; then
-        [ ${recursive_send} -eq 0 ] && zf_error "failed sending ${filesystem} incrementally from ${latest_snapshot}"
-        zf_warn "failed sending ${filesystem} incrementally from ${latest_snapshot}"
-        continue
-    fi
+    zf_msg "Both ends are in sync for ${filesystem}"
 
     # TODO: implement something to set local and remote retention (zf_zfs_is_user_allowed "destroy")
     # TODO: check for proper permission for destroying snapshots
