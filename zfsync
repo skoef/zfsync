@@ -215,15 +215,16 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
             continue
         fi
 
-        zf_msg "Checking both sides again for matches"
+        zf_msg "Proceeding sending incremental update for ${filesystem}"
+        latest_match=$oldest_snapshot
+    else
+        latest_match=$(echo ${matches} | awk '{print $NF}')
+        if [ -z "${latest_match}" ]; then
+            zf_error "no matches found between ${filesystem} and ${target}"
+        fi
     fi
 
     # perform incremental sync
-    latest_match=$(echo ${matches} | awk '{print $NF}')
-    if [ -z "${latest_match}" ]; then
-        zf_error "no matches found between ${filesystem} and ${target}"
-    fi
-
     zf_debug "latest matching snapshot found: ${latest_match}"
     latest_snapshot=$(zf_zfs_snapshots "${filesystem}" | tail -1)
     # latest snapshots on both sides don't match

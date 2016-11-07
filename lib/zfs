@@ -206,8 +206,8 @@ zf_zfs_apply_retention() {
     echo ${retention} | grep -Eq '^[0-9]+(h|H|d|w|m)?$' || zf_error "retention should be given numerically, optionally followed with a time unit h, d, w or m"
 
     if ! zf_zfs_is_user_allowed "${user}" "destroy" "${filesystem}" ${remote}; then
-        zf_warn "not keeping retention, user ${user} has no delete permission on ${filesystem}"
-        return 1
+        zf_warn "not keeping retention, user ${user} has no destroy permission on ${filesystem}"
+        return
     fi
 
     snapshots=$(zf_zfs_snapshots ${filesystem} ${remote})
