@@ -203,19 +203,47 @@ zf_zfs_apply_retention() {
     local filesystem=$1 retention=$2 limit=$3 user=$4 remote=$5 snapshots count
     [ -z "${filesystem}" -o -z "${retention}" -o -z "${limit}" -o -z "${user}" ] && zf_error "zf_zfs_apply_retention requires filesystem, retention, limit and user parameter"
 
-    echo ${retention} | grep -q '^[0-9]\+$' || zf_error "retention should be given numerically"
-    [ ${retention} -le 0 ] && zf_error "retention should be at least 1, not ${retention}"
+    echo ${retention} | grep -Eq '^[0-9]+(h|H|d|w|m)?$' || zf_error "retention should be given numerically, optionally followed with a time unit h, d, w or m"
 
     if ! zf_zfs_is_user_allowed "${user}" "destroy" "${filesystem}" ${remote}; then
         zf_warn "not keeping retention, user ${user} has no delete permission on ${filesystem}"
         return 1
     fi
 
-    zf_msg "Applying retention of ${retention} snapshots to ${filesystem}"
     snapshots=$(zf_zfs_snapshots ${filesystem} ${remote})
     [ -z "${snapshots}" ] && zf_error "no snapshots found for ${filesystem}"
-
     count=$(echo ${snapshots} | wc -w | awk '{print $1}')
+
+    # try to determine which time unit is given
+    retterm=$(echo ${retention} | grep -Eo '(h|H|d|w|m)$')
+    if [ ${?} -eq 0 ]; then
+        retention=$(echo ${retention} | grep -Eo '^[0-9]+')
+        local timeout
+        case ${retterm} in
+            [hH]) timeout=$(date -v-${retention}H "+%s");;
+            [dwm]) timeout=$(date -v-${retention}${retterm} "+%s");;
+            *) zf_error "invalid time unit ${retterm}";;
+        esac
+
+        zf_debug "based on given retention, timeout set to: ${timeout} ($(date -r ${timeout}))"
+        local snapshot snapshot_creation time_retention=0
+        for snapshot in ${snapshots}; do
+            cmd="get -H -p -o value creation ${filesystem}${snapshot}"
+            if [ "${remote}" = 1 ]; then
+                snapshot_creation=$(zf_zfs_remote_cmd "${cmd}")
+            else
+                snapshot_creation=$(zf_zfs_cmd "${cmd}")
+            fi
+            [ -z "${snapshot_creation}" ] && zf_error "could not get creation for ${filesystem}${snapshot}"
+            [ ${snapshot_creation} -ge ${timeout} ] && zf_debug "${filesystem}${snapshot}, created on ${snapshot_creation}, exceeds timeout ${timeout}" && break
+            time_retention=$((time_retention + 1))
+        done
+
+        zf_debug "based on retention of ${retention}${retterm}, ${time_retention} snapshots will be removed"
+        retention=$((count - time_retention))
+    fi
+
+    zf_msg "Applying retention of ${retention} snapshots to ${filesystem}"
     if [ ${count} -le ${retention} ]; then
         zf_debug "number of snapshots (${count}) below or equal to desired retention (${retention})"
         return 0

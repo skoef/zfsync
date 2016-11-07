@@ -99,7 +99,6 @@ fi
 [ -z "${ZF_TARGET_ZFS}" ] && zf_usage "no target ZFS specified"
 [ -z "${ZF_SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
 [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 -a ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_usage "can't use -m and -M together"
-# TODO: check ZF_*_RETENTION with regexp
 
 [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing common snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
 [ ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing missing snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
