@@ -236,7 +236,6 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     fi
     zf_msg "Both ends are in sync for ${filesystem}"
 
-    # TODO: if retention is specified in xD or xW, calculate
     if [ ! -z "${ZF_LOCAL_RETENTION}" -o ! -z "${ZF_REMOTE_RETENTION}" ]; then
         last_match=$(zf_zfs_matching_snapshots ${filesystem} ${target} | tail -1)
         [ ! -z "${ZF_LOCAL_RETENTION}" ] && zf_zfs_apply_retention ${filesystem} ${ZF_LOCAL_RETENTION} ${last_match} ${USER}

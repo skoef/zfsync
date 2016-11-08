@@ -31,9 +31,9 @@ Options:
     -k local_retention   after synchronizing, apply local retention
     -K remote_retention  after synchronizing, apply remote retention
     -m                   only show matching snapshots and exit (mutually
-					     exclusive with -M)
+                         exclusive with -M)
     -M                   only show missing snapshots and exit (mutually
-						 exclusive with -m)
+                         exclusive with -m)
     -P                   do not set user properties on remote end
     -q                   be more quiet
     -T target_zfs        ZFS on target host to send snapshots to [required]
