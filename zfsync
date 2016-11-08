@@ -219,9 +219,6 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         latest_match=$oldest_snapshot
     else
         latest_match=$(echo ${matches} | awk '{print $NF}')
-        if [ -z "${latest_match}" ]; then
-            zf_error "no matches found between ${filesystem} and ${target}"
-        fi
     fi
 
     # perform incremental sync
