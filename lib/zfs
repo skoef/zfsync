@@ -253,17 +253,17 @@ zf_zfs_apply_retention() {
 
     for snapshot in ${snapshots}; do
         if [ "${snapshot}" = "${limit}" ]; then
-			zf_warn "not removing last match ${limit} or beyond, since this would break replication"
-			break
-		fi
+            zf_warn "not removing last match ${limit} or beyond, since this would break replication"
+            break
+        fi
 
-		zf_zfs_destroy ${filesystem} ${snapshot} ${remote}
-		count=$((count - 1))
-		if [ "${count}" -le "${retention}" ]; then
-			zf_msg "${filesystem} kept at ${count} snapshots"
-			break
-		fi
-	done
+        zf_zfs_destroy ${filesystem} ${snapshot} ${remote}
+        count=$((count - 1))
+        if [ "${count}" -le "${retention}" ]; then
+            zf_msg "${filesystem} kept at ${count} snapshots"
+            break
+        fi
+    done
 }
 
 fi
