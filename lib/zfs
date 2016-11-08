@@ -101,24 +101,6 @@ zf_zfs_matching_snapshots() {
     rm ${tmp_local} ${tmp_remote}
 }
 
-zf_zfs_missing_snapshots() {
-    local local_zfs=$1 remote_zfs=$2
-    [ -z "${local_zfs}" -o -z "${remote_zfs}" ] && zf_error "zf_zfs_missing_snapshots requires local_zfs and remote_zfs parameter"
-
-    zf_debug "comparing snapshots of ${local_zfs} and ${remote_zfs}"
-
-    tmp_local=$(mktemp /tmp/zfsync.XXXXX)
-    printf "%s\n" $(zf_zfs_snapshots "${local_zfs}") > ${tmp_local}
-
-    tmp_remote=$(mktemp /tmp/zfsync.XXXX)
-    printf "%s\n" $(zf_zfs_snapshots "${remote_zfs}" 1) > ${tmp_remote}
-
-    # show diffs
-    diff -u ${tmp_local} ${tmp_remote} \
-        | awk -F @ '/^-@/ {print "@"$2}'
-    rm ${tmp_local} ${tmp_remote}
-}
-
 zf_zfs_exists() {
     local zfs=$1 remote=$2
     [ -z "${zfs}" ] && zf_error "zf_zfs_exists requires zfs parameter"
