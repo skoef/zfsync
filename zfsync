@@ -13,6 +13,8 @@ unset LANG
 # force PATH
 PATH=${PATH}:/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:/usr/local/sbin
 
+# allow libraries to be found relative to
+# current working directory for developing
 if [ -f "./lib/common" ]; then
     LIB="./lib"
 elif [ -d "/usr/local/lib/zfsync" ]; then
@@ -22,6 +24,7 @@ else
     exit 1
 fi
 
+# include libraries
 . "${LIB}/common"
 . "${LIB}/mbuffer"
 . "${LIB}/ssh"
@@ -44,13 +47,15 @@ ZF_MATCHING_SNAPSHOTS=0
 ZF_MISSING_SNAPSHOTS=0
 ZF_HAS_MBUFFER=0
 ZF_BUFFER=1
+ZF_LOCAL_RETENTION=
+ZF_REMOTE_RETENTION=
 
 # set defaults, only to be overriden
 # by configuration file
 ZF_MBUFFER_SIZE="1G"
 ZF_MBUFFER_FORCE_REMOTE=
 
-while getopts 'dBf:hH:iI:mMPqT:U:' opt; do
+while getopts 'dBf:hH:iI:k:K:mMPqT:U:' opt; do
     case ${opt} in
         d) ZF_DEBUG=1;;
         B) ZF_BUFFER=0;;
@@ -62,6 +67,8 @@ while getopts 'dBf:hH:iI:mMPqT:U:' opt; do
         H) ZF_TARGET_HOST=${OPTARG};;
         i) ZF_INCREMENTAL=1;;
         I) ZF_IDENTITY_FILE=${OPTARG};;
+        k) ZF_LOCAL_RETENTION=${OPTARG};;
+        K) ZF_REMOTE_RETENTION=${OPTARG};;
         m) ZF_MATCHING_SNAPSHOTS=1;;
         M) ZF_MISSING_SNAPSHOTS=1;;
         P) ZF_SET_PROPERTIES=0;;
@@ -184,8 +191,10 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         ZF_SET_PROPERTIES=0
     fi
 
+    zf_msg "Looking for matching snapshots between ${filesystem} and ${target}"
+    matches=$(zf_zfs_matching_snapshots "${filesystem}" "${target}")
     # look for matching snapshots
-    if ! zf_zfs_has_matching_snapshots "${filesystem}" "${target}"; then
+    if [ -z "${matches}" ]; then
         zf_warn "no matching snapshots between source and target"
         oldest_snapshot=$(zf_zfs_snapshots "${filesystem}" | head -1)
         # get oldest source snapshot for initial sync
@@ -206,28 +215,31 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
             continue
         fi
 
-        zf_msg "Checking both sides again for matches"
+        zf_msg "Proceeding sending incremental update for ${filesystem}"
+        latest_match=$oldest_snapshot
+    else
+        latest_match=$(echo ${matches} | awk '{print $NF}')
     fi
 
     # perform incremental sync
-    latest_match=$(zf_zfs_matching_snapshots "${filesystem}" "${target}" | tail -1)
-    if [ -z "${latest_match}" ]; then
-        zf_error "no matches found between ${filesystem} and ${target}"
-    fi
-
-    zf_debug "found matching snapshot ${latest_match}"
+    zf_debug "latest matching snapshot found: ${latest_match}"
     latest_snapshot=$(zf_zfs_snapshots "${filesystem}" | tail -1)
-    if [ "${latest_match}" = "${latest_snapshot}" ]; then
-        zf_msg "Both ends are in sync for ${filesystem}"
-        continue
+    # latest snapshots on both sides don't match
+    if [ "${latest_match}" != "${latest_snapshot}" ]; then
+        zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
+        [ ${ZF_INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
+        if ! zf_zfs_sync "${filesystem}${latest_snapshot}" "${target}" "${cmd_inc} ${latest_match}"; then
+            [ ${recursive_send} -eq 0 ] && zf_error "failed sending ${filesystem} incrementally from ${latest_snapshot}"
+            zf_warn "failed sending ${filesystem} incrementally from ${latest_snapshot}"
+            continue
+        fi
     fi
+    zf_msg "Both ends are in sync for ${filesystem}"
 
-    zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
-    [ ${ZF_INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
-    if ! zf_zfs_sync "${filesystem}${latest_snapshot}" "${target}" "${cmd_inc} ${latest_match}"; then
-        [ ${recursive_send} -eq 0 ] && zf_error "failed sending ${filesystem} incrementally from ${latest_snapshot}"
-        zf_warn "failed sending ${filesystem} incrementally from ${latest_snapshot}"
-        continue
+    if [ ! -z "${ZF_LOCAL_RETENTION}" -o ! -z "${ZF_REMOTE_RETENTION}" ]; then
+        last_match=$(zf_zfs_matching_snapshots ${filesystem} ${target} | tail -1)
+        [ ! -z "${ZF_LOCAL_RETENTION}" ] && zf_zfs_apply_retention ${filesystem} ${ZF_LOCAL_RETENTION} ${last_match} ${USER}
+        [ ! -z "${ZF_REMOTE_RETENTION}" ] && zf_zfs_apply_retention ${target} ${ZF_REMOTE_RETENTION} ${last_match} ${ZF_TARGET_USER} 1
     fi
 done
 
