@@ -13,7 +13,7 @@ syncs all filesystems from `zroot/precious/data` to the remote host.
 
 ##Usage:
 ```
-zfsync [-dhimMPq] [-U target_user] [-I identity_file] [-k retention]
+zfsync [-dhiPq] [-U target_user] [-I identity_file] [-k retention]
        [-K retention] -H target_host -T target_zfs
        source_zfs
 
@@ -30,10 +30,6 @@ Options:
     -I identity_file     use this key for authentication
     -k local_retention   after synchronizing, apply local retention
     -K remote_retention  after synchronizing, apply remote retention
-    -m                   only show matching snapshots and exit (mutually
-                         exclusive with -M)
-    -M                   only show missing snapshots and exit (mutually
-                         exclusive with -m)
     -P                   do not set user properties on remote end
     -q                   be more quiet
     -T target_zfs        ZFS on target host to send snapshots to [required]

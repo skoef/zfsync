@@ -3,7 +3,6 @@
 # XXX: ideas:
 # - compression
 # - custom zfsync zfs properties
-# - check for large_blocks and use it if present
 
 # halt on error
 set -e
@@ -43,8 +42,6 @@ ZF_SILENT=0
 ZF_INCREMENTAL=0
 ZF_LARGE_BLOCKS=0
 ZF_SET_PROPERTIES=1
-ZF_MATCHING_SNAPSHOTS=0
-ZF_MISSING_SNAPSHOTS=0
 ZF_HAS_MBUFFER=0
 ZF_BUFFER=1
 ZF_LOCAL_RETENTION=
@@ -55,7 +52,7 @@ ZF_REMOTE_RETENTION=
 ZF_MBUFFER_SIZE="1G"
 ZF_MBUFFER_FORCE_REMOTE=
 
-while getopts 'dBf:hH:iI:k:K:mMPqT:U:' opt; do
+while getopts 'dBf:hH:iI:k:K:PqT:U:' opt; do
     case ${opt} in
         d) ZF_DEBUG=1;;
         B) ZF_BUFFER=0;;
@@ -69,8 +66,6 @@ while getopts 'dBf:hH:iI:k:K:mMPqT:U:' opt; do
         I) ZF_IDENTITY_FILE=${OPTARG};;
         k) ZF_LOCAL_RETENTION=${OPTARG};;
         K) ZF_REMOTE_RETENTION=${OPTARG};;
-        m) ZF_MATCHING_SNAPSHOTS=1;;
-        M) ZF_MISSING_SNAPSHOTS=1;;
         P) ZF_SET_PROPERTIES=0;;
         q) ZF_SILENT=1;;
         T) ZF_TARGET_ZFS=${OPTARG%/};;
@@ -98,14 +93,9 @@ fi
 [ -z "${ZF_TARGET_HOST}" ] && zf_usage "no target host specified"
 [ -z "${ZF_TARGET_ZFS}" ] && zf_usage "no target ZFS specified"
 [ -z "${ZF_SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
-[ ${ZF_MATCHING_SNAPSHOTS} -eq 1 -a ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_usage "can't use -m and -M together"
-
-[ ${ZF_MATCHING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing common snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
-[ ${ZF_MISSING_SNAPSHOTS} -eq 1 ] && zf_msg "Listing missing snapshots between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
 
 # determine if we can use -L during sending
-if [ ${ZF_MATCHING_SNAPSHOTS} -eq 0 -a ${ZF_MISSING_SNAPSHOTS} -eq 0 ] && \
-    zf_zpool_has_feature ${ZF_SOURCE_ZFS%%/*} "large_blocks" && \
+if zf_zpool_has_feature ${ZF_SOURCE_ZFS%%/*} "large_blocks" && \
     zf_zpool_has_feature ${ZF_TARGET_ZFS%%/*} "large_blocks" 1; then
     zf_msg "Using large blocks while sending"
     ZF_LARGE_BLOCKS=1
@@ -137,38 +127,12 @@ fi
 # more effectively
 zf_zfs_has_childfs ${ZF_SOURCE_ZFS} && recursive_send=1 || recursive_send=0
 
-if [ ${recursive_send} -eq 1 ] && [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 -o ${ZF_MISSING_SNAPSHOTS} -eq 1 ]; then
-    zf_error "can't compare snapshots of filesystems with childs"
-fi
-
 for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     if [ ${recursive_send} -eq 1 ]; then
         suffix=$(echo ${filesystem} | sed "s#^${ZF_SOURCE_ZFS}##")
         target="${ZF_TARGET_ZFS}${suffix}"
     else
         target=${ZF_TARGET_ZFS}
-    fi
-
-    # if only looking for matching snapshots, show them now
-    if [ ${ZF_MATCHING_SNAPSHOTS} -eq 1 ]; then
-        snapshots=$(zf_zfs_matching_snapshots ${ZF_SOURCE_ZFS} ${ZF_TARGET_ZFS})
-        if [ -z "${snapshots}" ]; then
-            zf_error "no matching snapshots found between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
-        fi
-
-        echo $snapshots | xargs -n 1 echo
-        exit
-    fi
-
-    # if only looking for missing snapshots, show them now
-    if [ ${ZF_MISSING_SNAPSHOTS} -eq 1 ]; then
-        snapshots=$(zf_zfs_missing_snapshots ${ZF_SOURCE_ZFS} ${ZF_TARGET_ZFS})
-        if [ -z "${snapshots}" ]; then
-            zf_error "no missing snapshots found between ${ZF_SOURCE_ZFS} and ${ZF_TARGET_ZFS}"
-        fi
-
-        echo $snapshots | xargs -n 1 echo
-        exit
     fi
 
     # local permissions check
