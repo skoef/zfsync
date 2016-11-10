@@ -36,7 +36,7 @@ zf_zfs_is_user_allowed() {
 
     # get permissions for given zfs
     cmd="allow ${zfs}"
-    [ "${remote}" = 1 ] && allow=$(zf_zfs_remote_cmd "${cmd}") || allow=$(zf_zfs_cmd "${cmd}")
+    allow=$(zf_zfs_cmd "${cmd}" ${remote})
 
     # no permissions at all
     if [ -z "${allow}" ]; then
@@ -68,11 +68,7 @@ zf_zfs_snapshots() {
     [ -z "${zfs}" ] && zf_error "zf_zfs_snapshots requires zfs parameter"
 
     cmd="zfs list -H -o name -s creation -t snapshot -r -d 1 ${zfs}"
-    if [ "${remote}" = 1 ]; then
-        zf_zfs_remote_cmd "${cmd}" | awk -F'@' '{print "@"$2}'
-    else
-        zf_zfs_cmd "${cmd}" | awk -F'@' '{print "@"$2}'
-    fi
+    zf_zfs_cmd "${cmd}" ${remote} | awk -F'@' '{print "@"$2}'
 }
 
 zf_zfs_has_matching_snapshots() {
@@ -106,39 +102,30 @@ zf_zfs_exists() {
     [ -z "${zfs}" ] && zf_error "zf_zfs_exists requires zfs parameter"
 
     cmd="list ${zfs} >/dev/null 2>&1"
-    if [ "${remote}" = 1 ]; then
-        zf_zfs_remote_cmd "${cmd}"
-    else
-        zf_zfs_cmd "${cmd}"
-    fi
+    zf_zfs_cmd "${cmd}" ${remote}
 }
 
 zf_zfs_cmd() {
-    local cmd=$1
+    local cmd=$1 remote=$2
     [ -z "${cmd}" ] && zf_error "zf_zfs_cmd requires cmd parameter"
 
-    # ensure command starts with 'zfs '
-    expr "${cmd}" : '^zfs ' >/dev/null || cmd="zfs ${cmd}"
-    zf_debug "running local command: ${cmd}"
-
-    eval "${cmd}"
-}
-
-zf_zfs_remote_cmd() {
-    local cmd=$1
-    [ -z "${cmd}" ] && zf_error "zf_zfs_remote_cmd requires cmd parameter"
+    [ ! -z "${remote}" ] && [ "${remote}" -ne 1 ] \
+        && zf_error "zf_zfs_cmd: remote parameter should be either 1 or not given"
 
     # ensure command starts with 'zfs '
     expr "${cmd}" : '^zfs ' >/dev/null || cmd="zfs ${cmd}"
+    if [ "${remote}" = 1 ]; then
+        # enable mbuffer when needed
+        if echo ${cmd} | grep -q '^zfs receive' && [ ! -z "$(zf_mbuffer_get_cmd 1)" ]; then
+            cmd="$(zf_mbuffer_get_cmd 1) | ${cmd}"
+        fi
 
-    # enable mbuffer when needed
-    if echo ${cmd} | grep -q '^zfs receive' && [ ! -z "$(zf_mbuffer_get_cmd 1)" ]; then
-        cmd="$(zf_mbuffer_get_cmd 1) | ${cmd}"
+        zf_debug "running remote command: ${cmd}"
+        zf_ssh_cmd "${cmd}"
+    else
+        zf_debug "running local command: ${cmd}"
+        eval "${cmd}"
     fi
-
-    zf_debug "running remote command: ${cmd}"
-
-    zf_ssh_cmd "${cmd}"
 }
 
 zf_zfs_sync() {
@@ -162,7 +149,7 @@ zf_zfs_sync() {
 
     # TODO: perhaps not always use -F
     zf_zfs_cmd "send ${options} ${source} ${send_pipe_arg}" | \
-        zf_zfs_remote_cmd "zfs receive -F ${target} ${recv_pipe_arg}"
+        zf_zfs_cmd "zfs receive -F ${target} ${recv_pipe_arg}" 1
 }
 
 zf_zfs_destroy() {
@@ -174,11 +161,7 @@ zf_zfs_destroy() {
     zf_zfs_exists "${filesystem}${snapshot}" $remote || zf_error "snapshot ${filesystem}${snapshot} doesn't exists"
 
     cmd="destroy ${filesystem}${snapshot}"
-    if [ "${remote}" = 1 ]; then
-        zf_zfs_remote_cmd "${cmd}"
-    else
-        zf_zfs_cmd "${cmd}"
-    fi
+    zf_zfs_cmd "${cmd}" ${remote}
 }
 
 zf_zfs_apply_retention() {
@@ -211,11 +194,7 @@ zf_zfs_apply_retention() {
         local snapshot snapshot_creation time_retention=0
         for snapshot in ${snapshots}; do
             cmd="get -H -p -o value creation ${filesystem}${snapshot}"
-            if [ "${remote}" = 1 ]; then
-                snapshot_creation=$(zf_zfs_remote_cmd "${cmd}")
-            else
-                snapshot_creation=$(zf_zfs_cmd "${cmd}")
-            fi
+            snapshot_creation=$(zf_zfs_cmd "${cmd}" ${remote})
             [ -z "${snapshot_creation}" ] && zf_error "could not get creation for ${filesystem}${snapshot}"
             [ ${snapshot_creation} -ge ${timeout} ] && zf_debug "${filesystem}${snapshot}, created on ${snapshot_creation}, exceeds timeout ${timeout}" && break
             time_retention=$((time_retention + 1))
