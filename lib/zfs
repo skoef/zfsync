@@ -87,14 +87,15 @@ zf_zfs_matching_snapshots() {
     zf_debug "comparing snapshots of ${local_zfs} and ${remote_zfs}"
 
     tmp_local=$(mktemp /tmp/zfsync.XXXXX)
+    trap "rm ${tmp_local}" EXIT
     printf "%s\n" $(zf_zfs_snapshots "${local_zfs}") > ${tmp_local}
 
     tmp_remote=$(mktemp /tmp/zfsync.XXXX)
+    trap "rm ${tmp_local} ${tmp_remote}" EXIT
     printf "%s\n" $(zf_zfs_snapshots "${remote_zfs}" 1) > ${tmp_remote}
 
     # show matches
     comm -12 ${tmp_local} ${tmp_remote} || true
-    rm ${tmp_local} ${tmp_remote}
 }
 
 zf_zfs_exists() {
