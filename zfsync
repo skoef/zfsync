@@ -118,7 +118,7 @@ if ! zf_zfs_exists "${ZF_SOURCE_ZFS}"; then
 fi
 
 if ! zf_zfs_exists "${ZF_TARGET_ZFS}" 1; then
-    zf_error "target ZFS ${ZF_TARGET_USER} not found"
+    zf_error "target ZFS ${ZF_TARGET_ZFS} not found"
 fi
 
 # instead of using replication streams
@@ -151,7 +151,7 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     fi
 
     if [ ${ZF_SET_PROPERTIES} -eq 1 ] && ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "userprop" "${ZF_TARGET_ZFS}" 1; then
-        zf_warn "${ZF_TARGET_USER} lacks 'userprop' permission on ${ZF_TARGET_ZFS}, implying -P"
+        zf_warn "user ${ZF_TARGET_USER} lacks 'userprop' permission on ${ZF_TARGET_ZFS}, implying -P"
         ZF_SET_PROPERTIES=0
     fi
 
