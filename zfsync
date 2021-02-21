@@ -156,10 +156,24 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     fi
 
     zf_msg "Looking for matching snapshots between ${filesystem} and ${target}"
-    matches=$(zf_zfs_matching_snapshots "${filesystem}" "${target}")
+    # looking up matching snapshots only makes sense when the remote filesystem
+    # exists
+    if zf_zfs_exists "${target}" 1; then
+        matches=$(zf_zfs_matching_snapshots "${filesystem}" "${target}")
+
+        # if no matches, but target has snapshots, we can't synchronize
+        # these filesystems.
+        # "cannot receive new filesystem stream: destination has snapshots"
+        if [ -z "${matches}" ] && [ ! -z "$(zf_zfs_snapshots ${target} 1)" ]; then
+            zf_error "source and target have no matching snapshots, but target has snapshots of its own, aborting"
+        fi
+    else
+        matches=
+    fi
+
     # look for matching snapshots
     if [ -z "${matches}" ]; then
-        zf_warn "no matching snapshots between source and target"
+        zf_msg "No matching snapshots between source and target"
         oldest_snapshot=$(zf_zfs_snapshots "${filesystem}" | head -1)
         # get oldest source snapshot for initial sync
         if [ -z "${oldest_snapshot}" ]; then
