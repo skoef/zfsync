@@ -13,15 +13,17 @@ syncs all filesystems from `zroot/precious/data` to the remote host.
 
 ##Usage:
 ```
-zfsync [-dhiPq] [-U target_user] [-I identity_file] [-k retention]
-       [-K retention] -H target_host -T target_zfs
+zfsync [-BdhiPq] [-f config_file] [-U target_user] [-I identity_file]
+       [-k retention] [-K retention] -H target_host -T target_zfs
        source_zfs
 
     source_zfs is the filesystem that should be synced to a remote host
 
 Options:
-    -d                   enable debugging (negates -q)
     -B                   even when mbuffer is detected, don't buffer
+    -d                   enable debugging (negates -q)
+    -f config_file       read settings from config_file, these override
+                         command line options
     -h                   show you this help page
     -H target_host       host to send snapshots to [required]
     -i                   send incremental stream between local and remote

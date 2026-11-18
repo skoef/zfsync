@@ -7,14 +7,17 @@ zf_usage() {
     local msg=$1
     [ ! -z "${msg}" ] && echo "Error: ${msg}" >&2
     cat >&2 << EOT
-Usage: zfsync [-dhiPq] [-U target_user] [-I identity_file] [-k retention]
-              [-K retention] -H target_host -T target_zfs
+Usage: zfsync [-BdhiPq] [-f config_file] [-U target_user] [-I identity_file]
+              [-k retention] [-K retention] -H target_host -T target_zfs
               source_zfs
 
     source_zfs is the filesystem that should be synced to a remote host
 
 Options:
+    -B                   even when mbuffer is detected, don't buffer
     -d                   enable debugging (negates -q)
+    -f config_file       read settings from config_file, these override
+                         command line options
     -h                   show you this help page
     -H target_host       host to send snapshots to [required]
     -i                   send incremental stream between local and remote
@@ -55,7 +58,7 @@ zf_msg(){
 
 zf_has_binary() {
     local bin=$1 path
-    path=$(which ${bin} 2>/dev/null)
+    path=$(command -v ${bin} 2>/dev/null || true)
 
     if [ -z "${path}" ] || [ ! -x ${path} ]; then
         zf_debug "${bin} not found in PATH"

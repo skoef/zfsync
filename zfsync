@@ -89,6 +89,8 @@ if [ ! -z "${ZF_CONFIG_FILE}" ]; then
 fi
 
 # defaults and parameter checking
+# USER is not always set, e.g. when running from cron
+[ -z "${USER}" ] && USER=$(id -un)
 [ -z "${ZF_TARGET_USER}" ] && ZF_TARGET_USER="${USER}"
 [ -z "${ZF_TARGET_HOST}" ] && zf_usage "no target host specified"
 [ -z "${ZF_TARGET_ZFS}" ] && zf_usage "no target ZFS specified"
@@ -121,6 +123,21 @@ if ! zf_zfs_exists "${ZF_TARGET_ZFS}" 1; then
     zf_error "target ZFS ${ZF_TARGET_ZFS} not found"
 fi
 
+# remote permissions check, only depends on the target ZFS
+# so check it once instead of for every filesystem
+# TODO: what if the other side is not mounted
+# TODO: if recursive, check childfs remotely as well
+zf_msg "Checking permissions on target"
+target_properties="receive,create,mount"
+if ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "${target_properties}" "${ZF_TARGET_ZFS}" 1; then
+   zf_error "required remote permissions for ${ZF_TARGET_USER} on ${ZF_TARGET_ZFS} not met: ${target_properties}"
+fi
+
+if [ ${ZF_SET_PROPERTIES} -eq 1 ] && ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "userprop" "${ZF_TARGET_ZFS}" 1; then
+    zf_warn "user ${ZF_TARGET_USER} lacks 'userprop' permission on ${ZF_TARGET_ZFS}, implying -P"
+    ZF_SET_PROPERTIES=0
+fi
+
 # instead of using replication streams
 # we break recursive sends into individual filesystems
 # so we can control and report on each filesystem
@@ -129,30 +146,16 @@ zf_zfs_has_childfs ${ZF_SOURCE_ZFS} && recursive_send=1 || recursive_send=0
 
 for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
     if [ ${recursive_send} -eq 1 ]; then
-        suffix=$(echo ${filesystem} | sed "s#^${ZF_SOURCE_ZFS}##")
-        target="${ZF_TARGET_ZFS}${suffix}"
+        target="${ZF_TARGET_ZFS}${filesystem#"${ZF_SOURCE_ZFS}"}"
     else
         target=${ZF_TARGET_ZFS}
     fi
 
     # local permissions check
-    zf_msg "Checking permissions on source and target"
+    zf_msg "Checking permissions on ${filesystem}"
     source_properties="hold,send"
     if ! zf_zfs_is_user_allowed "${USER}" "${source_properties}" "${filesystem}"; then
        zf_error "required local permissions for ${USER} on ${filesystem} not met: ${source_properties}"
-    fi
-
-    # remote permissions check
-    # TODO: what if the other side is not mounted
-    # TODO: if recursive, check childfs remotely as well
-    target_properties="receive,create,mount"
-    if ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "${target_properties}" "${ZF_TARGET_ZFS}" 1; then
-       zf_error "required remote permissions for ${ZF_TARGET_USER} on ${ZF_TARGET_ZFS} not met: ${target_properties}"
-    fi
-
-    if [ ${ZF_SET_PROPERTIES} -eq 1 ] && ! zf_zfs_is_user_allowed "${ZF_TARGET_USER}" "userprop" "${ZF_TARGET_ZFS}" 1; then
-        zf_warn "user ${ZF_TARGET_USER} lacks 'userprop' permission on ${ZF_TARGET_ZFS}, implying -P"
-        ZF_SET_PROPERTIES=0
     fi
 
     zf_msg "Looking for matching snapshots between ${filesystem} and ${target}"

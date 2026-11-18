@@ -36,8 +36,8 @@ Each lib file is wrapped in an include guard (`LIB_*_INCLUDED`). Functions use t
 
 - **Portability**: the target is FreeBSD/illumos `/bin/sh`. Keep code POSIX-ish, with no bashisms. `local` is used and works in FreeBSD sh and dash, but breaks on ksh-as-sh (noted in the README). Retention uses BSD `date -v` and `date -r`, so it won't work with GNU date or on Linux. ZFS on Linux is untested.
 - **Config precedence**: the config file passed with `-f` is sourced *after* `getopts`, so config values override CLI flags.
-- **Usage text drift**: the help text in `lib/common` omits `-B` (no mbuffer) and `-f` (config file). The README lists `-B` but not `-f`. Update both places when changing options.
-- **Global leakage**: several functions assign non-`local` variables (`cmd`, `matches`, `fses`, `regex`, `tmp_*`). Be careful when reusing those names in callers, for example the main loop uses `matches`.
-- **Temp files**: `zf_zfs_matching_snapshots` resets the `EXIT` trap on each call, so only the last call's temp files are guaranteed to be cleaned up.
+- **Usage text lives in two places**: `zf_usage` in `lib/common` and the README. Update both when changing options.
+- **Global leakage**: several functions assign non-`local` variables (`cmd`, `matches`, `fses`, `regex`). Be careful when reusing those names in callers, for example the main loop uses `matches`.
+- **Pipelines report the last command's status** (no `pipefail` in `sh`). `zf_zfs_sync` captures the `zfs receive` status through fd 3 when it filters stderr through `grep`; keep that in mind before adding more `| grep` stages.
 - **`set -e`**: it is on globally. Commands whose failure is expected need `|| true` or must be used in a conditional.
 - The large-blocks check passes the *target* pool name to `zf_zpool_has_feature` with remote=1. It derives the pool from `-T` by taking everything before the first `/`.
