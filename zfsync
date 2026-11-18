@@ -24,10 +24,15 @@ else
 fi
 
 # include libraries
+# shellcheck source=lib/common
 . "${LIB}/common"
+# shellcheck source=lib/mbuffer
 . "${LIB}/mbuffer"
+# shellcheck source=lib/ssh
 . "${LIB}/ssh"
+# shellcheck source=lib/zfs
 . "${LIB}/zfs"
+# shellcheck source=lib/zpool
 . "${LIB}/zpool"
 
 # parse command line
@@ -81,11 +86,12 @@ shift "$((OPTIND - 1))"
 ZF_SOURCE_ZFS=${1%/}
 
 # source configuration file
-if [ ! -z "${ZF_CONFIG_FILE}" ]; then
+if [ -n "${ZF_CONFIG_FILE}" ]; then
     [ ! -f "${ZF_CONFIG_FILE}" ] && zf_error "configuration file ${ZF_CONFIG_FILE} not found"
     [ ! -r "${ZF_CONFIG_FILE}" ] && zf_error "configuration file ${ZF_CONFIG_FILE} not readable"
 
-    . ${ZF_CONFIG_FILE}
+    # shellcheck source=zfsync.conf
+    . "${ZF_CONFIG_FILE}"
 fi
 
 # defaults and parameter checking
@@ -97,8 +103,8 @@ fi
 [ -z "${ZF_SOURCE_ZFS}" ] && zf_usage "no source ZFS specified"
 
 # determine if we can use -L during sending
-if zf_zpool_has_feature ${ZF_SOURCE_ZFS%%/*} "large_blocks" && \
-    zf_zpool_has_feature ${ZF_TARGET_ZFS%%/*} "large_blocks" 1; then
+if zf_zpool_has_feature "${ZF_SOURCE_ZFS%%/*}" "large_blocks" && \
+    zf_zpool_has_feature "${ZF_TARGET_ZFS%%/*}" "large_blocks" 1; then
     zf_msg "Using large blocks while sending"
     ZF_LARGE_BLOCKS=1
 fi
@@ -142,10 +148,14 @@ fi
 # we break recursive sends into individual filesystems
 # so we can control and report on each filesystem
 # more effectively
-zf_zfs_has_childfs ${ZF_SOURCE_ZFS} && recursive_send=1 || recursive_send=0
+if zf_zfs_has_childfs "${ZF_SOURCE_ZFS}"; then
+    recursive_send=1
+else
+    recursive_send=0
+fi
 
-for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
-    if [ ${recursive_send} -eq 1 ]; then
+for filesystem in $(zf_zfs_get_recursive "${ZF_SOURCE_ZFS}"); do
+    if [ "${recursive_send}" -eq 1 ]; then
         target="${ZF_TARGET_ZFS}${filesystem#"${ZF_SOURCE_ZFS}"}"
     else
         target=${ZF_TARGET_ZFS}
@@ -167,7 +177,7 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         # if no matches, but target has snapshots, we can't synchronize
         # these filesystems.
         # "cannot receive new filesystem stream: destination has snapshots"
-        if [ -z "${matches}" ] && [ ! -z "$(zf_zfs_snapshots ${target} 1)" ]; then
+        if [ -z "${matches}" ] && [ -n "$(zf_zfs_snapshots "${target}" 1)" ]; then
             zf_error "source and target have no matching snapshots, but target has snapshots of its own, aborting"
         fi
     else
@@ -180,7 +190,7 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         oldest_snapshot=$(zf_zfs_snapshots "${filesystem}" | head -1)
         # get oldest source snapshot for initial sync
         if [ -z "${oldest_snapshot}" ]; then
-            if [ ${recursive_send} -eq 1 ]; then
+            if [ "${recursive_send}" -eq 1 ]; then
                 zf_msg "Source ${filesystem} has no snapshots"
                 continue
             fi
@@ -191,7 +201,7 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         # perform initial sync
         zf_msg "Sending initial snapshot ${oldest_snapshot}"
         if ! zf_zfs_sync "${filesystem}${oldest_snapshot}" "${target}"; then
-            [ ${recursive_send} -eq 0 ] && zf_error "failed sending initial snapshot ${filesystem}"
+            [ "${recursive_send}" -eq 0 ] && zf_error "failed sending initial snapshot ${filesystem}"
             zf_warn "failed sending initial snapshot ${filesystem}"
             continue
         fi
@@ -199,7 +209,7 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         zf_msg "Proceeding sending incremental update for ${filesystem}"
         latest_match=$oldest_snapshot
     else
-        latest_match=$(echo ${matches} | awk '{print $NF}')
+        latest_match=$(printf '%s\n' "${matches}" | tail -1)
     fi
 
     # perform incremental sync
@@ -210,17 +220,17 @@ for filesystem in $(zf_zfs_get_recursive ${ZF_SOURCE_ZFS}); do
         zf_msg "Sending incremental from ${latest_match} to ${latest_snapshot}"
         [ ${ZF_INCREMENTAL} -eq 1 ] && cmd_inc="-i" || cmd_inc="-I"
         if ! zf_zfs_sync "${filesystem}${latest_snapshot}" "${target}" "${cmd_inc} ${latest_match}"; then
-            [ ${recursive_send} -eq 0 ] && zf_error "failed sending ${filesystem} incrementally from ${latest_snapshot}"
+            [ "${recursive_send}" -eq 0 ] && zf_error "failed sending ${filesystem} incrementally from ${latest_snapshot}"
             zf_warn "failed sending ${filesystem} incrementally from ${latest_snapshot}"
             continue
         fi
     fi
     zf_msg "Both ends are in sync for ${filesystem}"
 
-    if [ ! -z "${ZF_LOCAL_RETENTION}" -o ! -z "${ZF_REMOTE_RETENTION}" ]; then
-        last_match=$(zf_zfs_matching_snapshots ${filesystem} ${target} | tail -1)
-        [ ! -z "${ZF_LOCAL_RETENTION}" ] && zf_zfs_apply_retention ${filesystem} ${ZF_LOCAL_RETENTION} ${last_match} ${USER}
-        [ ! -z "${ZF_REMOTE_RETENTION}" ] && zf_zfs_apply_retention ${target} ${ZF_REMOTE_RETENTION} ${last_match} ${ZF_TARGET_USER} 1
+    if [ -n "${ZF_LOCAL_RETENTION}" ] || [ -n "${ZF_REMOTE_RETENTION}" ]; then
+        last_match=$(zf_zfs_matching_snapshots "${filesystem}" "${target}" | tail -1)
+        [ -n "${ZF_LOCAL_RETENTION}" ] && zf_zfs_apply_retention "${filesystem}" "${ZF_LOCAL_RETENTION}" "${last_match}" "${USER}"
+        [ -n "${ZF_REMOTE_RETENTION}" ] && zf_zfs_apply_retention "${target}" "${ZF_REMOTE_RETENTION}" "${last_match}" "${ZF_TARGET_USER}" 1
     fi
 done
 

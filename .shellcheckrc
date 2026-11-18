@@ -1,0 +1,10 @@
+# zfsync targets plain /bin/sh (FreeBSD sh, illumos, dash)
+shell=sh
+
+# resolve "# shellcheck source=lib/..." relative to the repo root
+source-path=SCRIPTDIR
+external-sources=true
+
+# 'local' is not POSIX, but supported by every shell zfsync targets
+# (FreeBSD sh, dash, bash); see Known issues in README.md for ksh
+disable=SC3043
