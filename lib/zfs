@@ -71,15 +71,6 @@ zf_zfs_snapshots() {
     zf_zfs_cmd "${cmd}" ${remote} | awk -F'@' '{print "@"$2}'
 }
 
-zf_zfs_has_matching_snapshots() {
-    local local_zfs=$1 remote_zfs=$2
-    [ -z "${local_zfs}" -o -z "${remote_zfs}" ] && zf_error "zf_zfs_has_matching_snapshots requires local_zfs and remote_zfs parameter"
-    zf_debug "checking if ${local_zfs} and ${remote_zfs} have matching snapshots"
-
-    matches=$(zf_zfs_matching_snapshots ${local_zfs} ${remote_zfs} | grep .)
-    ! [ -z "${matches}" ]
-}
-
 zf_zfs_matching_snapshots() {
     local local_zfs=$1 remote_zfs=$2
     [ -z "${local_zfs}" -o -z "${remote_zfs}" ] && zf_error "zf_zfs_matching_snapshots requires local_zfs and remote_zfs parameter"
