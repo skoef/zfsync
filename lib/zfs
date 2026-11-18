@@ -77,16 +77,22 @@ zf_zfs_matching_snapshots() {
 
     zf_debug "comparing snapshots of ${local_zfs} and ${remote_zfs}"
 
-    tmp_local=$(mktemp /tmp/zfsync.XXXXX)
-    trap "rm ${tmp_local}" EXIT
-    printf "%s\n" $(zf_zfs_snapshots "${local_zfs}") > ${tmp_local}
+    local tmp_local tmp_remote
+    tmp_local=$(mktemp /tmp/zfsync.XXXXXX)
+    tmp_remote=$(mktemp /tmp/zfsync.XXXXXX)
+    trap 'rm -f "${tmp_local}" "${tmp_remote}"' EXIT
 
-    tmp_remote=$(mktemp /tmp/zfsync.XXXX)
-    trap "rm ${tmp_local} ${tmp_remote}" EXIT
-    printf "%s\n" $(zf_zfs_snapshots "${remote_zfs}" 1) > ${tmp_remote}
+    # write lists directly, so an empty list yields an empty
+    # pattern file (which matches nothing) instead of an empty
+    # line (which matches everything)
+    zf_zfs_snapshots "${local_zfs}" > "${tmp_local}"
+    zf_zfs_snapshots "${remote_zfs}" 1 > "${tmp_remote}"
 
-    # show matches
-    grep -w -F -f ${tmp_local} ${tmp_remote} || true
+    # show matches, in remote creation order; match whole lines
+    # so @daily-2021 doesn't match @daily-2021-01
+    grep -x -F -f "${tmp_local}" "${tmp_remote}" || true
+
+    rm -f "${tmp_local}" "${tmp_remote}"
 }
 
 zf_zfs_exists() {
@@ -121,17 +127,18 @@ zf_zfs_cmd() {
 }
 
 zf_zfs_sync() {
-    local source=$1 target=$2 options=$3 send_pipe_arg recv_pipe_arg
+    local source=$1 target=$2 options=$3 send_pipe_arg
     [ -z "${source}" -o -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
 
     [ ${ZF_LARGE_BLOCKS} -eq 1 ] && options="${options} -L"
     [ ${ZF_DEBUG} -eq 1 ] && options="${options} -v"
 
 
+    local filter_props=0
     if [ ${ZF_SET_PROPERTIES} -eq 1 ]; then
         options="${options} -p"
-        # filter warning messages
-        [ ${ZF_DEBUG} -eq 0 ] && recv_pipe_arg="2>&1 | grep -vE 'cannot receive [^ ]{1,} property'"
+        # filter property warning messages, unless debugging
+        [ ${ZF_DEBUG} -eq 0 ] && filter_props=1
     fi
 
     # pipe stream through mbuffer when available
@@ -140,8 +147,29 @@ zf_zfs_sync() {
     fi
 
     # TODO: perhaps not always use -F
-    zf_zfs_cmd "send ${options} ${source} ${send_pipe_arg}" | \
-        zf_zfs_cmd "zfs receive -F ${target} ${recv_pipe_arg}" 1
+    if [ ${filter_props} -eq 0 ]; then
+        zf_zfs_cmd "send ${options} ${source} ${send_pipe_arg}" | \
+            zf_zfs_cmd "zfs receive -F ${target}" 1
+        return
+    fi
+
+    # filter stderr through grep without letting grep's exit status
+    # replace the one of zfs receive: the receive status is written
+    # to fd 3 and captured, stdout is kept on the original stdout (fd 4)
+    local rc
+    exec 4>&1
+    rc=$(
+        {
+            {
+                zf_zfs_cmd "send ${options} ${source} ${send_pipe_arg}" | \
+                    zf_zfs_cmd "zfs receive -F ${target}" 1
+                echo $? >&3
+            } 2>&1 1>&4 | grep -vE 'cannot receive [^ ]{1,} property' >&2 || true
+        } 3>&1
+    )
+    exec 4>&-
+
+    return ${rc:-1}
 }
 
 zf_zfs_destroy() {
@@ -172,8 +200,9 @@ zf_zfs_apply_retention() {
     count=$(echo ${snapshots} | wc -w | awk '{print $1}')
 
     # try to determine which time unit is given
-    retterm=$(echo ${retention} | grep -Eo '(h|H|d|w|m)$')
-    if [ ${?} -eq 0 ]; then
+    # (|| true: a plain count has no unit, which must not trip set -e)
+    retterm=$(echo ${retention} | grep -Eo '(h|H|d|w|m)$' || true)
+    if [ -n "${retterm}" ]; then
         retention=$(echo ${retention} | grep -Eo '^[0-9]+')
         local timeout
         case ${retterm} in
