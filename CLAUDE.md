@@ -16,8 +16,9 @@ Each lib file is wrapped in an include guard (`LIB_*_INCLUDED`). Functions use t
 
 ## Running / developing
 
-- There is no build step, no test suite, and no CI. Libraries are found at `./lib` when `./lib/common` exists, otherwise at `/usr/local/lib/zfsync`. To use the in-tree libs, run `./zfsync` from the repo root.
-- You need a real ZFS source host and an SSH-reachable ZFS target to exercise it, so on macOS you can't run it end to end. Use `sh -n zfsync lib/*` for a syntax check. If `shellcheck -s sh` is available, run it too, though the existing code has many pre-existing warnings.
+- There is no build step and no test suite. Libraries are found at `./lib` when `./lib/common` exists, otherwise at `/usr/local/lib/zfsync`. To use the in-tree libs, run `./zfsync` from the repo root.
+- You need a real ZFS source host and an SSH-reachable ZFS target to exercise it, so on macOS you can't run it end to end. Use `sh -n zfsync lib/*` for a syntax check.
+- **Lint**: `shellcheck -x zfsync zfsync.conf lib/*` must pass with no output; CI runs exactly this ([.github/workflows/shellcheck.yml](.github/workflows/shellcheck.yml)). Settings live in [.shellcheckrc](.shellcheckrc), including `shell=sh` and an exception for `local`. Quote expansions; where word splitting is intended, prefer `${VAR:+...}` forms or an inline `# shellcheck disable=` with a reason.
 - Use `-d` for debug output, which logs every local and remote command before it runs.
 
 ## Key mechanics
@@ -29,7 +30,7 @@ Each lib file is wrapped in an include guard (`LIB_*_INCLUDED`). Functions use t
   - With a match, it sends an incremental (`-I` by default, `-i` with the `-i` flag) from the latest match to the newest local snapshot.
   - Receive always uses `-F`.
   - It aborts if the target has snapshots but none match the source.
-- **Permissions**: before sending, it checks the `zfs allow` output with a regex. It needs local `hold,send`, remote `receive,create,mount`, `userprop` for `-p`, and `destroy` for retention. `root` is assumed to be allowed. Group permissions are not checked.
+- **Permissions**: before sending, it checks each `user <name> <perm,...>` line of the `zfs allow` output, matching every permission as a whole list item. It needs local `hold,send`, remote `receive,create,mount`, `userprop` for `-p`, and `destroy` for retention. `root` is assumed to be allowed. Group permissions are not checked.
 - **Retention** (`-k`/`-K`): retention is either a count or an age (`h`/`d`/`w`/`m`). Oldest snapshots are destroyed first, and it never destroys the last common snapshot or anything newer.
 
 ## Gotchas / known quirks
