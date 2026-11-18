@@ -4,22 +4,21 @@ if [ -z "${LIB_SSH_INCLUDED}" ]; then
 LIB_SSH_INCLUDED=1
 
 zf_ssh_cmd() {
-    local cmd=$1 identity_arg user_arg
+    local cmd="$1"
     [ -z "${cmd}" ] && zf_error "zf_ssh_cmd requires cmd parameter"
 
-    [ ! -z "${ZF_IDENTITY_FILE}" ] && identity_arg="-i ${ZF_IDENTITY_FILE}"
-    [ ! -z "${ZF_TARGET_USER}" ] && user_arg="-l ${ZF_TARGET_USER}"
-
-    zf_debug "ssh args: ${identity_arg} ${user_arg}"
+    zf_debug "ssh args:${ZF_IDENTITY_FILE:+ -i ${ZF_IDENTITY_FILE}}${ZF_TARGET_USER:+ -l ${ZF_TARGET_USER}}"
     # wrap command in bourne shell
     # so we know output redirects work
     # as expected
     cmd="sh -c \"export PATH=/sbin:/bin:/usr/sbin:/usr/bin:/usr/local/bin:/usr/local/sbin; ${cmd}\""
 
+    # cmd is meant to be expanded locally and run remotely
+    # shellcheck disable=SC2029
     ssh \
-        ${identity_arg} \
-        ${user_arg} \
-        ${ZF_TARGET_HOST} "${cmd}"
+        ${ZF_IDENTITY_FILE:+-i "${ZF_IDENTITY_FILE}"} \
+        ${ZF_TARGET_USER:+-l "${ZF_TARGET_USER}"} \
+        "${ZF_TARGET_HOST}" "${cmd}"
 }
 
 fi

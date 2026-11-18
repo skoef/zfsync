@@ -4,7 +4,7 @@ if [ -z "${LIB_ZFS_INCLUDED}" ]; then
 LIB_ZFS_INCLUDED=1
 
 zf_zfs_get_recursive() {
-    local zfs=$1
+    local zfs="$1"
     [ -z "${zfs}" ] && zf_error "zf_zfs_get_recursive requires zfs parameter"
 
     zf_debug "listing recursive for ${zfs}"
@@ -12,20 +12,20 @@ zf_zfs_get_recursive() {
 }
 
 zf_zfs_has_childfs() {
-    local zfs=$1
+    local zfs="$1"
     [ -z "${zfs}" ] && zf_error "zf_zfs_has_childfs requires zfs parameter"
 
-    fses=$(zf_zfs_get_recursive ${zfs} | wc -l | awk '{print $1-1}')
+    fses=$(zf_zfs_get_recursive "${zfs}" | wc -l | awk '{print $1-1}')
     zf_debug "zfs ${zfs} has ${fses} child filesystem(s)"
 
-    [ ${fses} -gt 0 ]
+    [ "${fses}" -gt 0 ]
 }
 
 zf_zfs_is_user_allowed() {
-    local user=$1 permissions=$2 zfs=$3 remote=$4
-    [ -z "${permissions}" -o -z "${zfs}" ] && zf_error "zf_zfs_is_user_allowed requires permissions and zfs parameter"
+    local user="$1" permissions="$2" zfs="$3" remote="$4"
+    [ -z "${permissions}" ] || [ -z "${zfs}" ] && zf_error "zf_zfs_is_user_allowed requires permissions and zfs parameter"
 
-    if ! expr ${permissions} : '^[a-z, ]*$' >/dev/null; then
+    if ! expr "${permissions}" : '^[a-z, ]*$' >/dev/null; then
         zf_error "zf_zfs_is_user_allowed expects permissions in comma- or space-separated form, not ${permissions}"
     fi
 
@@ -36,7 +36,7 @@ zf_zfs_is_user_allowed() {
 
     # get permissions for given zfs
     cmd="allow ${zfs}"
-    allow=$(zf_zfs_cmd "${cmd}" ${remote})
+    allow=$(zf_zfs_cmd "${cmd}" "${remote}")
 
     # no permissions at all
     if [ -z "${allow}" ]; then
@@ -45,15 +45,14 @@ zf_zfs_is_user_allowed() {
     fi
 
     # check if every permission is listed
-    for permission in $(echo $permissions | sed 's/,/ /g'); do
+    for permission in $(echo "${permissions}" | sed 's/,/ /g'); do
         zf_debug "checking if ${user} has permission: ${permission}"
 
+        # match per line, e.g. "<tab>user zfsync create,mount,receive",
+        # and the permission as a whole item of the comma-separated list
         # TODO: add group permissions
-        regex=" {1,}user ${user} .*,?${permission}"
-        #zf_debug "testing allow"
-        #zf_debug "${allow}"
-        #zf_debug "against ${regex}"
-        if ! echo ${allow} | grep -q -E -e "${regex}"; then
+        regex="^[[:space:]]*user ${user} ([^[:space:]]*,)?${permission}(,|[[:space:]]|\$)"
+        if ! printf '%s\n' "${allow}" | grep -q -E -e "${regex}"; then
             zf_debug "permission ${permission} not found for ${user}"
             return 1
         fi
@@ -64,60 +63,57 @@ zf_zfs_is_user_allowed() {
 }
 
 zf_zfs_snapshots() {
-    local zfs=$1 remote=$2
+    local zfs="$1" remote="$2"
     [ -z "${zfs}" ] && zf_error "zf_zfs_snapshots requires zfs parameter"
 
     cmd="zfs list -H -o name -s creation -t snapshot -r -d 1 ${zfs}"
-    zf_zfs_cmd "${cmd}" ${remote} | awk -F'@' '{print "@"$2}'
-}
-
-zf_zfs_has_matching_snapshots() {
-    local local_zfs=$1 remote_zfs=$2
-    [ -z "${local_zfs}" -o -z "${remote_zfs}" ] && zf_error "zf_zfs_has_matching_snapshots requires local_zfs and remote_zfs parameter"
-    zf_debug "checking if ${local_zfs} and ${remote_zfs} have matching snapshots"
-
-    matches=$(zf_zfs_matching_snapshots ${local_zfs} ${remote_zfs} | grep .)
-    ! [ -z "${matches}" ]
+    zf_zfs_cmd "${cmd}" "${remote}" | awk -F'@' '{print "@"$2}'
 }
 
 zf_zfs_matching_snapshots() {
-    local local_zfs=$1 remote_zfs=$2
-    [ -z "${local_zfs}" -o -z "${remote_zfs}" ] && zf_error "zf_zfs_matching_snapshots requires local_zfs and remote_zfs parameter"
+    local local_zfs="$1" remote_zfs="$2"
+    [ -z "${local_zfs}" ] || [ -z "${remote_zfs}" ] && zf_error "zf_zfs_matching_snapshots requires local_zfs and remote_zfs parameter"
 
     zf_debug "comparing snapshots of ${local_zfs} and ${remote_zfs}"
 
-    tmp_local=$(mktemp /tmp/zfsync.XXXXX)
-    trap "rm ${tmp_local}" EXIT
-    printf "%s\n" $(zf_zfs_snapshots "${local_zfs}") > ${tmp_local}
+    local tmp_local tmp_remote
+    tmp_local=$(mktemp /tmp/zfsync.XXXXXX)
+    tmp_remote=$(mktemp /tmp/zfsync.XXXXXX)
+    trap 'rm -f "${tmp_local}" "${tmp_remote}"' EXIT
 
-    tmp_remote=$(mktemp /tmp/zfsync.XXXX)
-    trap "rm ${tmp_local} ${tmp_remote}" EXIT
-    printf "%s\n" $(zf_zfs_snapshots "${remote_zfs}" 1) > ${tmp_remote}
+    # write lists directly, so an empty list yields an empty
+    # pattern file (which matches nothing) instead of an empty
+    # line (which matches everything)
+    zf_zfs_snapshots "${local_zfs}" > "${tmp_local}"
+    zf_zfs_snapshots "${remote_zfs}" 1 > "${tmp_remote}"
 
-    # show matches
-    grep -w -F -f ${tmp_local} ${tmp_remote} || true
+    # show matches, in remote creation order; match whole lines
+    # so @daily-2021 doesn't match @daily-2021-01
+    grep -x -F -f "${tmp_local}" "${tmp_remote}" || true
+
+    rm -f "${tmp_local}" "${tmp_remote}"
 }
 
 zf_zfs_exists() {
-    local zfs=$1 remote=$2
+    local zfs="$1" remote="$2"
     [ -z "${zfs}" ] && zf_error "zf_zfs_exists requires zfs parameter"
 
     cmd="list ${zfs} >/dev/null 2>&1"
-    zf_zfs_cmd "${cmd}" ${remote}
+    zf_zfs_cmd "${cmd}" "${remote}"
 }
 
 zf_zfs_cmd() {
-    local cmd=$1 remote=$2
+    local cmd="$1" remote="$2"
     [ -z "${cmd}" ] && zf_error "zf_zfs_cmd requires cmd parameter"
 
-    [ ! -z "${remote}" ] && [ "${remote}" -ne 1 ] \
+    [ -n "${remote}" ] && [ "${remote}" -ne 1 ] \
         && zf_error "zf_zfs_cmd: remote parameter should be either 1 or not given"
 
     # ensure command starts with 'zfs '
     expr "${cmd}" : '^zfs ' >/dev/null || cmd="zfs ${cmd}"
     if [ "${remote}" = 1 ]; then
         # enable mbuffer when needed
-        if echo ${cmd} | grep -q '^zfs receive' && [ ! -z "$(zf_mbuffer_get_cmd 1)" ]; then
+        if echo "${cmd}" | grep -q '^zfs receive' && [ -n "$(zf_mbuffer_get_cmd 1)" ]; then
             cmd="$(zf_mbuffer_get_cmd 1) | ${cmd}"
         fi
 
@@ -130,74 +126,96 @@ zf_zfs_cmd() {
 }
 
 zf_zfs_sync() {
-    local source=$1 target=$2 options=$3 send_pipe_arg recv_pipe_arg
-    [ -z "${source}" -o -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
+    local source="$1" target="$2" options="$3" send_pipe_arg
+    [ -z "${source}" ] || [ -z "${target}" ] && zf_error "zf_zfs_sync requires source and target parameter"
 
-    [ ${ZF_LARGE_BLOCKS} -eq 1 ] && options="${options} -L"
-    [ ${ZF_DEBUG} -eq 1 ] && options="${options} -v"
+    [ "${ZF_LARGE_BLOCKS}" -eq 1 ] && options="${options} -L"
+    [ "${ZF_DEBUG}" -eq 1 ] && options="${options} -v"
 
-
-    if [ ${ZF_SET_PROPERTIES} -eq 1 ]; then
+    local filter_props=0
+    if [ "${ZF_SET_PROPERTIES}" -eq 1 ]; then
         options="${options} -p"
-        # filter warning messages
-        [ ${ZF_DEBUG} -eq 0 ] && recv_pipe_arg="2>&1 | grep -vE 'cannot receive [^ ]{1,} property'"
+        # filter property warning messages, unless debugging
+        [ "${ZF_DEBUG}" -eq 0 ] && filter_props=1
     fi
 
     # pipe stream through mbuffer when available
-    if [ ! -z "$(zf_mbuffer_get_cmd)" ]; then
+    if [ -n "$(zf_mbuffer_get_cmd)" ]; then
         send_pipe_arg="| $(zf_mbuffer_get_cmd)"
     fi
 
     # TODO: perhaps not always use -F
-    zf_zfs_cmd "send ${options} ${source} ${send_pipe_arg}" | \
-        zf_zfs_cmd "zfs receive -F ${target} ${recv_pipe_arg}" 1
+    if [ "${filter_props}" -eq 0 ]; then
+        zf_zfs_cmd "send ${options} ${source} ${send_pipe_arg}" | \
+            zf_zfs_cmd "zfs receive -F ${target}" 1
+        return
+    fi
+
+    # filter stderr through grep without letting grep's exit status
+    # replace the one of zfs receive: the receive status is written
+    # to fd 3 and captured, stdout is kept on the original stdout (fd 4)
+    local rc
+    exec 4>&1
+    rc=$(
+        {
+            {
+                zf_zfs_cmd "send ${options} ${source} ${send_pipe_arg}" | \
+                    zf_zfs_cmd "zfs receive -F ${target}" 1
+                echo $? >&3
+            } 2>&1 1>&4 | grep -vE 'cannot receive [^ ]{1,} property' >&2 || true
+        } 3>&1
+    )
+    exec 4>&-
+
+    return "${rc:-1}"
 }
 
 zf_zfs_destroy() {
-    local filesystem=$1 snapshot=$2 remote=$3 cmd
-    [ -z "${filesystem}" -o -z "${snapshot}" ] && zf_error "zf_zfs_destroy requires filesystem and snapshot parameter"
+    local filesystem="$1" snapshot="$2" remote="$3" cmd
+    [ -z "${filesystem}" ] || [ -z "${snapshot}" ] && zf_error "zf_zfs_destroy requires filesystem and snapshot parameter"
 
-    echo ${snapshot} | grep -q '^@' || zf_error "snapshot should start with @: ${snapshot}"
+    echo "${snapshot}" | grep -q '^@' || zf_error "snapshot should start with @: ${snapshot}"
 
-    zf_zfs_exists "${filesystem}${snapshot}" $remote || zf_error "snapshot ${filesystem}${snapshot} doesn't exists"
+    zf_zfs_exists "${filesystem}${snapshot}" "${remote}" || zf_error "snapshot ${filesystem}${snapshot} doesn't exists"
 
     cmd="destroy ${filesystem}${snapshot}"
-    zf_zfs_cmd "${cmd}" ${remote}
+    zf_zfs_cmd "${cmd}" "${remote}"
 }
 
 zf_zfs_apply_retention() {
-    local filesystem=$1 retention=$2 limit=$3 user=$4 remote=$5 snapshots count
-    [ -z "${filesystem}" -o -z "${retention}" -o -z "${limit}" -o -z "${user}" ] && zf_error "zf_zfs_apply_retention requires filesystem, retention, limit and user parameter"
+    local filesystem="$1" retention="$2" limit="$3" user="$4" remote="$5" snapshots count
+    [ -z "${filesystem}" ] || [ -z "${retention}" ] || [ -z "${limit}" ] || [ -z "${user}" ] && zf_error "zf_zfs_apply_retention requires filesystem, retention, limit and user parameter"
 
-    echo ${retention} | grep -Eq '^[0-9]+(h|H|d|w|m)?$' || zf_error "retention should be given numerically, optionally followed with a time unit h, d, w or m"
+    echo "${retention}" | grep -Eq '^[0-9]+(h|H|d|w|m)?$' || zf_error "retention should be given numerically, optionally followed with a time unit h, d, w or m"
 
-    if ! zf_zfs_is_user_allowed "${user}" "destroy" "${filesystem}" ${remote}; then
+    if ! zf_zfs_is_user_allowed "${user}" "destroy" "${filesystem}" "${remote}"; then
         zf_warn "not keeping retention, user ${user} has no destroy permission on ${filesystem}"
         return
     fi
 
-    snapshots=$(zf_zfs_snapshots ${filesystem} ${remote})
+    snapshots=$(zf_zfs_snapshots "${filesystem}" "${remote}")
     [ -z "${snapshots}" ] && zf_error "no snapshots found for ${filesystem}"
-    count=$(echo ${snapshots} | wc -w | awk '{print $1}')
+    count=$(echo "${snapshots}" | wc -w | awk '{print $1}')
 
     # try to determine which time unit is given
-    retterm=$(echo ${retention} | grep -Eo '(h|H|d|w|m)$')
-    if [ ${?} -eq 0 ]; then
-        retention=$(echo ${retention} | grep -Eo '^[0-9]+')
+    # (|| true: a plain count has no unit, which must not trip set -e)
+    retterm=$(echo "${retention}" | grep -Eo '(h|H|d|w|m)$' || true)
+    if [ -n "${retterm}" ]; then
+        retention=$(echo "${retention}" | grep -Eo '^[0-9]+')
         local timeout
-        case ${retterm} in
-            [hH]) timeout=$(date -v-${retention}H "+%s");;
-            [dwm]) timeout=$(date -v-${retention}${retterm} "+%s");;
+        case "${retterm}" in
+            [hH]) timeout=$(date -v-"${retention}"H "+%s");;
+            [dwm]) timeout=$(date -v-"${retention}${retterm}" "+%s");;
             *) zf_error "invalid time unit ${retterm}";;
         esac
 
-        zf_debug "based on given retention, timeout set to: ${timeout} ($(date -r ${timeout}))"
+        zf_debug "based on given retention, timeout set to: ${timeout} ($(date -r "${timeout}"))"
         local snapshot snapshot_creation time_retention=0
         for snapshot in ${snapshots}; do
             cmd="get -H -p -o value creation ${filesystem}${snapshot}"
-            snapshot_creation=$(zf_zfs_cmd "${cmd}" ${remote})
+            snapshot_creation=$(zf_zfs_cmd "${cmd}" "${remote}")
             [ -z "${snapshot_creation}" ] && zf_error "could not get creation for ${filesystem}${snapshot}"
-            [ ${snapshot_creation} -ge ${timeout} ] && zf_debug "${filesystem}${snapshot}, created on ${snapshot_creation}, exceeds timeout ${timeout}" && break
+            [ "${snapshot_creation}" -ge "${timeout}" ] && zf_debug "${filesystem}${snapshot}, created on ${snapshot_creation}, exceeds timeout ${timeout}" && break
             time_retention=$((time_retention + 1))
         done
 
@@ -206,7 +224,7 @@ zf_zfs_apply_retention() {
     fi
 
     zf_msg "Applying retention of ${retention} snapshots to ${filesystem}"
-    if [ ${count} -le ${retention} ]; then
+    if [ "${count}" -le "${retention}" ]; then
         zf_debug "number of snapshots (${count}) below or equal to desired retention (${retention})"
         return 0
     fi
@@ -219,7 +237,7 @@ zf_zfs_apply_retention() {
             break
         fi
 
-        zf_zfs_destroy ${filesystem} ${snapshot} ${remote}
+        zf_zfs_destroy "${filesystem}" "${snapshot}" "${remote}"
         count=$((count - 1))
         if [ "${count}" -le "${retention}" ]; then
             zf_msg "${filesystem} kept at ${count} snapshots"

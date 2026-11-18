@@ -4,7 +4,7 @@ if [ -z "${LIB_ZPOOL_INCLUDED}" ]; then
 LIB_ZPOOL_INCLUDED=1
 
 zf_zpool_has_feature() {
-    local zpool=$1 feature=$2 remote=$3 output cmd
+    local zpool="$1" feature="$2" remote="$3" output cmd
     [ -z "${feature}" ] && zf_error "zpool_has_feature requires feature parameter"
 
     # make sure feature starts with feature@
@@ -17,11 +17,11 @@ zf_zpool_has_feature() {
         output=$(zf_zpool_cmd "${cmd}")
     fi
 
-    echo ${output} | grep -q -E '^(enabled|active)$'
+    echo "${output}" | grep -q -E '^(enabled|active)$'
 }
 
 zf_zpool_cmd() {
-    local cmd=$1
+    local cmd="$1"
     [ -z "${cmd}" ] && zf_error "zf_zpool_cmd requires cmd parameter"
 
     # ensure command starts with 'zpool '
@@ -32,7 +32,7 @@ zf_zpool_cmd() {
 }
 
 zf_zpool_remote_cmd() {
-    local cmd=$1
+    local cmd="$1"
     [ -z "${cmd}" ] && zf_error "zf_zpool_remote_cmd requires cmd parameter"
 
     # ensure command starts with 'zfs '
